@@ -11,19 +11,36 @@ import numpy as np
 from .encoders import SentenceEncoder, TfidfSentenceEncoder
 
 DEFAULT_WINDOWS = (3, 5, 8, 13)
+_CLOSING_PUNCTUATION = "」』】）》〉〕〗〙〛”’\"'"
+_TERMINAL_PATTERN = re.compile(
+    rf"[。！？!?](?:[{re.escape(_CLOSING_PUNCTUATION)}]*)"
+    rf"|\.(?:[{re.escape(_CLOSING_PUNCTUATION)}]*)(?=\s|$)"
+)
 
 
 def split_sentences(text: str) -> list[str]:
-    """Split Japanese or Latin prose while retaining terminal punctuation."""
+    """Split Japanese or Latin prose while retaining punctuation and quotes."""
 
     cleaned = text.strip()
     if not cleaned:
         return []
-    parts = re.split(
-        r"(?<=[。！？!?])[\t ]*|(?<=\.)[\t ]+|\n+",
-        cleaned,
-    )
-    return [part.strip() for part in parts if part.strip()]
+
+    sentences: list[str] = []
+    for raw_line in cleaned.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        start = 0
+        for match in _TERMINAL_PATTERN.finditer(line):
+            end = match.end()
+            sentence = line[start:end].strip()
+            if sentence:
+                sentences.append(sentence)
+            start = end
+        remainder = line[start:].strip()
+        if remainder:
+            sentences.append(remainder)
+    return sentences
 
 
 def _normalize_rows(vectors: np.ndarray) -> np.ndarray:
@@ -71,14 +88,7 @@ def _align_trajectory_to_sentence_ids(
     trajectory: np.ndarray,
     permutation: np.ndarray,
 ) -> np.ndarray:
-    """Map perturbed-order states back to the original sentence identities.
-
-    ``permutation[position]`` is the original sentence ID occupying that
-    perturbed position. Re-alignment ensures perturbation distances compare the
-    state attached to the same current sentence, so the metric isolates changed
-    history rather than merely comparing different sentence content at a fixed
-    position.
-    """
+    """Map perturbed-order states back to the original sentence identities."""
 
     order = np.asarray(permutation, dtype=int)
     if order.ndim != 1 or len(order) != len(trajectory):
@@ -144,12 +154,7 @@ def compute_fingerprint(
     seed: int = 42,
     redundancy_threshold: float = 0.86,
 ) -> FingerprintResult:
-    """Compute a descriptive fingerprint from sentences and their vectors.
-
-    The returned values do not estimate authorship probability. At least four
-    sentences are required because order perturbations below that length are
-    not a useful narrative diagnostic.
-    """
+    """Compute a descriptive fingerprint from sentences and their vectors."""
 
     if len(sentences) < 4:
         raise ValueError("at least four sentences are required")
