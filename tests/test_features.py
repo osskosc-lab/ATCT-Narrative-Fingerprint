@@ -2,7 +2,12 @@ import unittest
 
 import numpy as np
 
-from atct_fingerprint.features import compute_fingerprint, split_sentences
+from atct_fingerprint.features import (
+    _align_trajectory_to_sentence_ids,
+    _cosine_distance_rows,
+    compute_fingerprint,
+    split_sentences,
+)
 
 
 class FeatureTests(unittest.TestCase):
@@ -13,12 +18,47 @@ class FeatureTests(unittest.TestCase):
             ["最初の文です。", "次へ進む！", "最後の文です？"],
         )
 
+    def test_english_sentence_split_preserves_decimal(self):
+        text = "Version 3.14 is stable. Next sentence! Final sentence?"
+        self.assertEqual(
+            split_sentences(text),
+            ["Version 3.14 is stable.", "Next sentence!", "Final sentence?"],
+        )
+
     def test_constant_trajectory_has_no_order_signal(self):
         sentences = [f"sentence {index}" for index in range(6)]
         vectors = np.ones((6, 4))
         result = compute_fingerprint(sentences, vectors, shuffle_count=8)
         self.assertAlmostEqual(result.order_sensitivity, 0.0)
         self.assertAlmostEqual(result.reverse_sensitivity, 0.0)
+
+    def test_zero_vectors_compare_as_identical(self):
+        zeros = np.zeros((3, 4))
+        distances = _cosine_distance_rows(zeros, zeros)
+        np.testing.assert_allclose(distances, np.zeros(3))
+
+    def test_perturbed_states_are_aligned_by_sentence_identity(self):
+        trajectory = np.asarray(
+            [
+                [10.0, 0.0],
+                [20.0, 0.0],
+                [30.0, 0.0],
+                [40.0, 0.0],
+            ]
+        )
+        permutation = np.asarray([2, 0, 3, 1])
+        aligned = _align_trajectory_to_sentence_ids(trajectory, permutation)
+        np.testing.assert_allclose(
+            aligned,
+            np.asarray(
+                [
+                    [20.0, 0.0],
+                    [40.0, 0.0],
+                    [10.0, 0.0],
+                    [30.0, 0.0],
+                ]
+            ),
+        )
 
     def test_fingerprint_is_seed_deterministic(self):
         sentences = [f"sentence {index}" for index in range(8)]
