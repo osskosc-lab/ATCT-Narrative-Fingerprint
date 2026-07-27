@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import asdict
 import json
 from pathlib import Path
 from typing import Mapping
@@ -24,14 +25,16 @@ def _write_summary_pdf(path: Path, result: FingerprintResult) -> None:
     """Write a dependency-free, ASCII summary PDF."""
 
     lines = [
-        "ATCT Narrative Fingerprint v0.2",
+        "ATCT Narrative Fingerprint v0.3",
         f"Primary metric: Z_order = {result.order_z:.4f}",
         f"Gate: {result.gate}",
         f"Sentences: {result.sentence_count}",
         f"Primary history window: {result.primary_window}",
         f"Original consistency: {result.original_consistency:.4f}",
-        f"Reverse directionality: {result.reverse_directionality:.4f}",
-        f"Long-history gain: {result.long_history_gain:.4f}",
+        f"Directional asymmetry: {result.reverse_directionality:.4f}",
+        f"Direction method: {result.directionality.method}",
+        f"Rolling long-history gain: {result.long_history_gain:.4f}",
+        f"Rolling test samples: {result.long_history_prediction.test_samples}",
         f"Turning-point Z: {result.turning_point_z:.4f}",
         f"Theme cohesion: {result.theme_cohesion:.4f}",
         f"Segment diversity: {result.segment_diversity:.4f}",
@@ -100,7 +103,7 @@ def write_report_bundle(
     *,
     fingerprint_payload: Mapping[str, object] | None = None,
 ) -> dict[str, str]:
-    """Write the complete v0.2 report bundle and return generated paths."""
+    """Write the complete v0.3 report bundle and return generated paths."""
 
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
@@ -116,12 +119,15 @@ def write_report_bundle(
         "index",
         "sentence_number",
         "text",
+        "section",
         "history_consistency",
         "history_z",
         "history_change",
         "curvature",
         "turn_z",
         "long_history_gain",
+        "direction_delta",
+        "licensed_jump",
         "role",
     ]
     with sentence_path.open("w", encoding="utf-8-sig", newline="") as handle:
@@ -165,6 +171,38 @@ def write_report_bundle(
         writer.writeheader()
         writer.writerows(motif_rows)
 
+    section_path = destination / "section_graph.csv"
+    section_fields = [
+        "source_id",
+        "target_id",
+        "source_heading",
+        "target_heading",
+        "transition_distance",
+        "target_history_support",
+        "relation",
+        "licensed_jump",
+    ]
+    with section_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=section_fields)
+        writer.writeheader()
+        writer.writerows(asdict(edge) for edge in result.section_graph.edges)
+
+    block_path = destination / "document_blocks.csv"
+    block_fields = [
+        "kind",
+        "text",
+        "start_line",
+        "end_line",
+        "section",
+        "level",
+        "role",
+    ]
+    block_rows = result.document_structure.get("blocks", [])
+    with block_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=block_fields)
+        writer.writeheader()
+        writer.writerows(block_rows)
+
     report_path = destination / "report.md"
     controls = "\n".join(
         f"- {name}: effect={summary.effect:.4f}, "
@@ -174,12 +212,21 @@ def write_report_bundle(
     report_path.write_text(
         "\n".join(
             [
-                "# ATCT Narrative Fingerprint v0.2",
+                "# ATCT Narrative Fingerprint v0.3",
                 "",
                 f"- **Z_order:** {result.order_z:.4f}",
                 f"- **判定:** {result.gate}",
                 f"- **構造型:** {result.structure_type}",
-                f"- **長距離履歴利得:** {result.long_history_gain:.4f}",
+                (
+                    f"- **方向性（{result.directionality.method}）:** "
+                    f"{result.reverse_directionality:.4f}"
+                ),
+                f"- **外部予測による長距離履歴利得:** {result.long_history_gain:.4f}",
+                (
+                    f"- **短期／長期テスト誤差:** "
+                    f"{result.long_history_prediction.short_test_error:.4f} / "
+                    f"{result.long_history_prediction.long_test_error:.4f}"
+                ),
                 f"- **転換点Z:** {result.turning_point_z:.4f}",
                 f"- **主題凝集度:** {result.theme_cohesion:.4f}",
                 f"- **構造的多様性:** {result.segment_diversity:.4f}",
@@ -187,6 +234,20 @@ def write_report_bundle(
                 "## 順序対照",
                 "",
                 controls,
+                "",
+                "## 文書階層",
+                "",
+                (
+                    f"- 本文ブロック: "
+                    f"{result.document_structure.get('layer_counts', {}).get('prose', 0)}"
+                ),
+                (
+                    f"- 数式ブロック: "
+                    f"{result.document_structure.get('layer_counts', {}).get('equation', 0)}"
+                ),
+                f"- 節ノード: {len(result.section_graph.nodes)}",
+                f"- 節遷移: {len(result.section_graph.edges)}",
+                f"- Licensed Jump: {len(result.licensed_jumps)}",
                 "",
                 "## 解釈境界",
                 "",
@@ -203,6 +264,8 @@ def write_report_bundle(
         "sentence_map": str(sentence_path),
         "turning_points": str(turning_path),
         "motif_pairs": str(motif_path),
+        "section_graph": str(section_path),
+        "document_blocks": str(block_path),
         "markdown": str(report_path),
         "pdf": str(pdf_path),
     }

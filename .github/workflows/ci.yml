@@ -31,4 +31,7 @@ jobs:
             --output reports/smoke
           test -s reports/smoke/fingerprint.json
           test -s reports/smoke/sentence_map.csv
+          test -s reports/smoke/section_graph.csv
+          test -s reports/smoke/document_blocks.csv
           test -s reports/smoke/report.pdf
+          python -m json.tool reports/smoke/fingerprint.json > /dev/null

@@ -1,12 +1,8 @@
-# ATCT Narrative Fingerprint v0.2
+# ATCT Narrative Fingerprint v0.3
 
 **文章がどのような履歴依存構造で生成されたかを測るチェッカー**
 
-v0.2 changes the central question from:
-
-> Does this document have order structure?
-
-to:
+The fixed research question remains:
 
 > Is the original history-conditioned coherence significantly higher than
 > content-preserving order controls?
@@ -50,20 +46,58 @@ structure. The former fixed 0–100 aggregate display score has been removed.
 
 The threshold is a research convention, not a universal calibration.
 
-## v0.2 outputs
+## v0.3 changes
+
+Markdown input is separated before semantic analysis:
+
+\[
+\text{prose layer}\oplus\text{equation layer}\oplus\text{structure layer}.
+\]
+
+Headings, equations, quotes, lists, tables, and thematic breaks are preserved
+as metadata instead of being counted as ordinary prose sentences. Equations
+are tagged with roles such as definition, hypothesis, falsification, theorem,
+or conclusion.
+
+Order interventions now distinguish adjacent swaps, within-paragraph
+shuffles, 3–5-sentence blocks, paragraph order, section order, full random
+order, and reversal. A section graph records macro transitions.
+
+Direction is no longer inferred from a symmetric embedding distance alone.
+The lightweight CI baseline compares character-ngram conditional likelihood
+under preceding versus following context. This is an asymmetric lexical
+baseline; confirmatory semantic direction claims require a frozen
+autoregressive model.
+
+Long-history gain is measured on held-out future sentences with rolling-origin
+ridge prediction:
+
+\[
+G_{\mathrm{long}} =
+E_{\mathrm{short}}^{\mathrm{test}}-
+E_{\mathrm{long}}^{\mathrm{test}}.
+\]
+
+Explicit boundary statements such as "this is a metaphor" or "does not prove"
+are recorded as `Licensed Jump` evidence and are not automatically reported as
+unexplained logical leaps.
+
+## Outputs
 
 ### Structure strength
 
 - random-shuffle `Z_order`;
-- adjacent-swap and 3–5-sentence block controls;
-- reverse directionality;
-- long-history predictive gain \(C^{(13)}-C^{(3)}\);
+- adjacent, paragraph-internal, block, paragraph-order, section-order, random,
+  and reverse controls;
+- asymmetric conditional directionality;
+- rolling-origin long-history predictive gain;
 - normalized turning-point Z.
 
 ### Structure type
 
 - `linear`;
 - `circular`;
+- `open_spiral`;
 - `stepwise`;
 - `branching`;
 - `repetitive`;
@@ -73,7 +107,9 @@ The threshold is a research convention, not a universal calibration.
 ### Explanation and editing risks
 
 - one row per sentence with \(C_t\), history Z, history-state change, curvature,
-  turning Z, long-history gain, and structural role;
+  turning Z, held-out long-history gain, direction delta, section, Licensed
+  Jump status, and structural role;
+- Markdown layer inventory and section-transition graph;
 - transformed motif returns separated from exact copied meaning;
 - theme cohesion separated from between-segment diversity;
 - short-sentence rate, length variance, lexical diversity, and technical-term
@@ -113,7 +149,7 @@ python -m pip install -e ".[semantic]"
 atct-fingerprint analyze article.txt \
   --encoder e5 \
   --shuffles 200 \
-  --controls local,block,random,reverse \
+  --controls local,paragraph_inner,block,paragraph_order,section_order,random,reverse \
   --sentence-map \
   --motif-analysis \
   --output reports/article
@@ -127,6 +163,8 @@ reports/article/
 ├── sentence_map.csv
 ├── turning_points.csv
 ├── motif_pairs.csv
+├── section_graph.csv
+├── document_blocks.csv
 ├── report.md
 └── report.pdf
 ```
@@ -143,15 +181,17 @@ atct-fingerprint evaluate data/confirmatory.csv --encoder e5
 ```
 
 It rejects AI-source overlap and normalized duplicate documents between train
-and test. This benchmark does not replace the v0.2 primary document-level
+and test. This benchmark does not replace the v0.3 primary document-level
 `Z_order` proposition.
 
 ## Validation status
 
-The implementation includes deterministic tests for current-sentence
-exclusion, random-null behavior, local/block/random/reverse controls, 30-seed
-sign stability, shuffled-chain falsification, paragraph-order preservation,
-motif deletion, exact-copy rejection, and report generation.
+The implementation includes 29 deterministic tests. They cover
+current-sentence exclusion, Markdown layer separation, hierarchical order
+controls, reversal of the asymmetric direction score, rolling prediction
+without future-target leakage, 30-seed sign stability, shuffled-chain
+falsification, motif deletion, exact-copy rejection, Licensed Jump handling,
+and report generation.
 
 The PR remains a research preview until real Japanese E5 corpora pass the full
 acceptance matrix, especially literal sentence split/merge tolerance within

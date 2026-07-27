@@ -7,7 +7,16 @@ from typing import Iterable, Sequence
 import numpy as np
 
 
-CONTROL_NAMES = ("local", "block", "random", "reverse")
+CONTROL_NAMES = (
+    "local",
+    "paragraph_inner",
+    "block",
+    "paragraph_order",
+    "section_order",
+    "random",
+    "reverse",
+)
+STRUCTURED_CONTROLS = {"paragraph_inner", "paragraph_order", "section_order"}
 
 
 def _nonidentity_random(n_items: int, rng: np.random.Generator) -> np.ndarray:
@@ -65,11 +74,43 @@ def paragraph_swap(
     return np.concatenate([blocks[index] for index in order])
 
 
+def within_block_shuffle(
+    block_indices: Sequence[Sequence[int]],
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Shuffle sentences inside blocks while retaining the block sequence."""
+
+    blocks = [np.asarray(block, dtype=int) for block in block_indices if block]
+    if not blocks:
+        raise ValueError("within-block shuffle requires at least one block")
+    candidates = [index for index, block in enumerate(blocks) if len(block) >= 2]
+    if not candidates:
+        raise ValueError("within-block shuffle requires a block with two items")
+    identity = np.concatenate(blocks)
+    for _ in range(32):
+        shuffled = [
+            block[rng.permutation(len(block))] if len(block) >= 2 else block
+            for block in blocks
+        ]
+        order = np.concatenate(shuffled)
+        if not np.array_equal(order, identity):
+            return order
+    fallback = [block.copy() for block in blocks]
+    target = candidates[0]
+    fallback[target][0], fallback[target][1] = (
+        fallback[target][1],
+        fallback[target][0],
+    )
+    return np.concatenate(fallback)
+
+
 def generate_permutations(
     control: str,
     n_items: int,
     count: int,
     rng: np.random.Generator,
+    *,
+    blocks: Sequence[Sequence[int]] | None = None,
 ) -> list[np.ndarray]:
     """Generate deterministic interventions from a caller-owned RNG."""
 
@@ -79,6 +120,15 @@ def generate_permutations(
         raise ValueError("count must be positive")
     if control == "reverse":
         return [np.arange(n_items)[::-1]]
+    if control in STRUCTURED_CONTROLS:
+        if not blocks:
+            raise ValueError(f"{control} requires structured blocks")
+        generator = (
+            within_block_shuffle
+            if control == "paragraph_inner"
+            else paragraph_swap
+        )
+        return [generator(blocks, rng) for _ in range(count)]
     generator = {
         "local": local_swap,
         "block": block_swap,

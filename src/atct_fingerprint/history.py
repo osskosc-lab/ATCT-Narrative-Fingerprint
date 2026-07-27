@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass
 from typing import Sequence
 
 import numpy as np
 
 
 EPSILON = 1e-12
+
+
+@dataclass(frozen=True)
+class PredictiveGainResult:
+    method: str
+    short_window: int
+    long_window: int
+    short_test_error: float
+    long_test_error: float
+    gain: float
+    test_samples: int
+    sentence_gains: tuple[float | None, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
 
 
 def normalize_rows(vectors: np.ndarray) -> np.ndarray:
@@ -155,3 +171,86 @@ def long_history_gain(
     )
     gain = long - short
     return float(np.mean(gain)), gain
+
+
+def _ridge_predict(
+    train_states: np.ndarray,
+    train_targets: np.ndarray,
+    test_state: np.ndarray,
+    *,
+    ridge: float,
+) -> np.ndarray:
+    design = np.column_stack([train_states, np.ones(len(train_states))])
+    test = np.append(test_state, 1.0)
+    gram = design @ design.T
+    coefficients = np.linalg.solve(
+        gram + ridge * np.eye(len(gram)),
+        train_targets,
+    )
+    prediction = test @ design.T @ coefficients
+    return prediction / max(np.linalg.norm(prediction), EPSILON)
+
+
+def rolling_predictive_gain(
+    vectors: np.ndarray,
+    *,
+    short_window: int = 3,
+    long_window: int = 13,
+    decay: float = 0.35,
+    min_train: int = 4,
+    ridge: float = 1e-3,
+) -> PredictiveGainResult:
+    """Compare short/long histories on held-out future sentences.
+
+    At each time t, two ridge maps are fitted only on earlier state-target
+    pairs and evaluated on x_t. Positive gain means the longer history lowered
+    rolling-origin cosine prediction error.
+    """
+
+    if min_train < 2:
+        raise ValueError("min_train must be at least two")
+    if ridge <= 0:
+        raise ValueError("ridge must be positive")
+    matrix = normalize_rows(vectors)
+    short_states = causal_history_states(matrix, short_window, decay=decay)
+    long_states = causal_history_states(matrix, long_window, decay=decay)
+    short_errors: list[float] = []
+    long_errors: list[float] = []
+    sentence_gains: list[float | None] = [None] * len(matrix)
+    for index in range(min_train + 1, len(matrix)):
+        train_indices = np.arange(1, index)
+        if len(train_indices) < min_train:
+            continue
+        short_prediction = _ridge_predict(
+            short_states[train_indices],
+            matrix[train_indices],
+            short_states[index],
+            ridge=ridge,
+        )
+        long_prediction = _ridge_predict(
+            long_states[train_indices],
+            matrix[train_indices],
+            long_states[index],
+            ridge=ridge,
+        )
+        short_error = 1.0 - float(
+            np.clip(np.dot(short_prediction, matrix[index]), -1.0, 1.0)
+        )
+        long_error = 1.0 - float(
+            np.clip(np.dot(long_prediction, matrix[index]), -1.0, 1.0)
+        )
+        short_errors.append(short_error)
+        long_errors.append(long_error)
+        sentence_gains[index] = short_error - long_error
+    short_mean = float(np.mean(short_errors)) if short_errors else 0.0
+    long_mean = float(np.mean(long_errors)) if long_errors else 0.0
+    return PredictiveGainResult(
+        method="rolling_origin_ridge",
+        short_window=short_window,
+        long_window=long_window,
+        short_test_error=short_mean,
+        long_test_error=long_mean,
+        gain=short_mean - long_mean,
+        test_samples=len(short_errors),
+        sentence_gains=tuple(sentence_gains),
+    )

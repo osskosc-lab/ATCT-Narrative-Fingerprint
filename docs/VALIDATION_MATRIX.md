@@ -1,4 +1,4 @@
-# v0.2 validation matrix
+# v0.3 validation matrix
 
 The code-level tests below validate implementation behavior. They are not a
 substitute for a confirmatory Japanese multilingual-E5 corpus.
@@ -13,11 +13,19 @@ substitute for a confirmatory Japanese multilingual-E5 corpus.
 | original vs full shuffle | coherent chain loses Z after permutation | passed |
 | local vs global intervention | random effect exceeds adjacent-swap effect | passed |
 | paragraph preservation | paragraph permutation preserves within-block order | passed |
+| paragraph-internal control | block membership is preserved while sentence order changes | passed |
+| Markdown separation | headings, equation, quote, and list are excluded from prose count | passed |
+| equation role | heading context assigns the equation role | passed |
+| asymmetric reversal | reversal flips the conditional direction score sign | passed |
+| predictive holdout | changing later targets cannot change an earlier rolling gain | passed |
+| section hierarchy | heading-defined nodes and section-order control are emitted | passed |
+| Licensed Jump | explicit boundary markers suppress unexplained-leap misclassification | passed |
 | closing motif deletion | removing the final return lowers closure | passed |
 | copied paragraph rejection | exact duplicates excluded from transformed motif return | passed |
 | current-sentence exclusion | new causal state omits \(x_t\) and improves the synthetic gap | passed |
 | evidence localization | sentence map identifies history and turning evidence | passed |
-| report bundle | JSON, two CSV maps, motif CSV, Markdown, and PDF generated | passed |
+| report bundle | JSON, four CSV diagnostics, Markdown, and PDF generated | passed |
+| frozen autoregressive direction model | requires model revision and corpus freeze | pending |
 
 Operational status remains **research preview** while literal split/merge
 tolerance and real-corpus E5 stability are pending.

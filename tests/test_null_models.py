@@ -6,6 +6,7 @@ from atct_fingerprint.null_models import (
     block_swap,
     local_swap,
     paragraph_swap,
+    within_block_shuffle,
 )
 
 
@@ -30,6 +31,14 @@ class NullModelTests(unittest.TestCase):
         for paragraph in paragraphs:
             observed = [positions[value] for value in paragraph]
             self.assertEqual(observed, sorted(observed))
+        self.assertFalse(np.array_equal(order, np.arange(8)))
+
+    def test_paragraph_inner_control_preserves_block_membership(self):
+        paragraphs = [[0, 1, 2], [3, 4], [5, 6, 7]]
+        order = within_block_shuffle(paragraphs, np.random.default_rng(9))
+        self.assertEqual(set(order[:3]), {0, 1, 2})
+        self.assertEqual(set(order[3:5]), {3, 4})
+        self.assertEqual(set(order[5:]), {5, 6, 7})
         self.assertFalse(np.array_equal(order, np.arange(8)))
 
 

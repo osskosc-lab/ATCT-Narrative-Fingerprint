@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from atct_fingerprint.features import compute_fingerprint, split_sentences
+from atct_fingerprint.features import analyze_text, compute_fingerprint, split_sentences
 from atct_fingerprint.history import (
     causal_history_states,
     history_consistency,
@@ -88,13 +88,13 @@ class FeatureV02Tests(unittest.TestCase):
         result = compute_fingerprint(
             sentences,
             vectors,
-            controls=("local", "random"),
+            controls=("local", "paragraph_order", "random"),
             paragraphs=paragraphs,
             shuffle_count=64,
             seed=8,
         )
-        self.assertIn("paragraph", result.controls)
-        self.assertGreater(result.controls["paragraph"].effect, 0.0)
+        self.assertIn("paragraph_order", result.controls)
+        self.assertGreater(result.controls["paragraph_order"].effect, 0.0)
 
     def test_seed_is_exactly_reproducible(self):
         vectors = chain_vectors()
@@ -198,6 +198,24 @@ class FeatureV02Tests(unittest.TestCase):
             shuffle_count=16,
         )
         self.assertNotIn("display_scores", result.to_dict())
+
+    def test_markdown_analysis_emits_hierarchical_controls(self):
+        text = """# 導入
+問題を定義します。履歴を確認します。
+
+## 反証
+順序を交換します。結果の差を測ります。
+
+## 結論
+原文へ戻ります。次の実験を問いますか？
+"""
+        result = analyze_text(text, shuffle_count=8, seed=4)
+        self.assertEqual(result.sentence_count, 6)
+        self.assertIn("paragraph_inner", result.controls)
+        self.assertIn("paragraph_order", result.controls)
+        self.assertIn("section_order", result.controls)
+        self.assertEqual(result.document_structure["layer_counts"]["heading"], 3)
+        self.assertEqual(len(result.section_graph.nodes), 3)
 
 
 if __name__ == "__main__":

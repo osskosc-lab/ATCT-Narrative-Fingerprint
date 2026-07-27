@@ -1,4 +1,4 @@
-# ATCT Narrative Fingerprint v0.2 research protocol
+# ATCT Narrative Fingerprint v0.3 research protocol
 
 ## Fixed proposition
 
@@ -21,7 +21,7 @@ one primary falsification.
 
 ## History separation
 
-For every sentence \(x_t\), v0.2 constructs:
+For every prose sentence \(x_t\), v0.3 constructs:
 
 \[
 h_t^{(w)} =
@@ -43,10 +43,12 @@ history, so its sentence-level consistency and Z are reported as unavailable.
 | Control | Operation | Intended scale |
 |---|---|---|
 | local | swap one adjacent pair | local causal connection |
+| paragraph_inner | shuffle sentences inside each paragraph | paragraph-local order |
 | block | reorder 3–5 sentence blocks | scene or paragraph scale |
+| paragraph_order | reorder paragraphs, preserve order inside each | paragraph sequence |
+| section_order | reorder heading-defined sections | argument or scene sequence |
 | random | unrestricted non-identity permutation | global order |
-| reverse | reverse the complete document | temporal/argument direction |
-| paragraph | reorder paragraphs, preserve order inside each | local/global separation |
+| reverse | reverse the complete prose sequence | intervention control |
 
 All stochastic controls are generated from a fixed caller-visible seed.
 Sentence-level null values are mapped back to original sentence identities
@@ -57,7 +59,9 @@ before Z values are calculated.
 Secondary measures cannot overturn the primary gate:
 
 - normalized history curvature and turning-point Z;
-- long-history gain \(C^{(13)}-C^{(3)}\);
+- rolling-origin long-history gain
+  \(E_{\mathrm{short}}^{\mathrm{test}}-E_{\mathrm{long}}^{\mathrm{test}}\);
+- forward/backward conditional character-ngram likelihood difference;
 - opening/ending transformed closure;
 - distance-weighted transformed motif recurrence;
 - exact duplicate rate;
@@ -66,6 +70,21 @@ Secondary measures cannot overturn the primary gate:
 
 Exact near-duplicates are excluded from transformed motif return. This keeps a
 copied paragraph from being labeled as foreshadowing recovery.
+
+The conditional character-ngram score is a lightweight asymmetric baseline,
+not a production semantic language model. It cannot establish argumentative
+directionality by itself.
+
+## Markdown and hierarchy
+
+Only the prose layer is embedded. Equations, headings, quotes, list items,
+tables, code fences, and thematic breaks are retained as document metadata.
+Equations receive contextual role labels. Heading-defined sections form a
+sequential graph whose edges report transition distance, target-history
+support, convergence/divergence, and Licensed Jump status.
+
+An explicit boundary marker licenses a transition for editing diagnostics; it
+does not make the cross-domain claim scientifically valid.
 
 ## Encoder separation
 
@@ -82,6 +101,8 @@ The report preserves:
 - every sentence's evidence and structural role;
 - ranked turning points;
 - transformed motif and duplicate pair tables;
+- document-block inventory and section-transition graph;
+- asymmetric sentence direction deltas and Licensed Jump records;
 - surface-confound warnings;
 - editing-risk locations;
 - the seed and null sample count.

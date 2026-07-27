@@ -47,7 +47,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--controls",
         type=_controls,
         default=CONTROL_NAMES,
-        help="comma list: local,block,random,reverse",
+        help=(
+            "comma list: local,paragraph_inner,block,paragraph_order,"
+            "section_order,random,reverse"
+        ),
+    )
+    analyze.add_argument(
+        "--plain-text",
+        action="store_true",
+        help="disable Markdown layer separation",
     )
     analyze.add_argument("--sentence-map", action="store_true")
     analyze.add_argument("--motif-analysis", action="store_true")
@@ -69,6 +77,7 @@ def _analyze(text: str, encoder_name: str, args):
         seed=args.seed,
         shuffle_count=args.shuffles,
         controls=args.controls,
+        parse_markdown=not args.plain_text,
     )
 
 
@@ -89,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         lexical = _analyze(text, "tfidf", args)
         semantic = _analyze(text, "e5", args)
         payload = {
-            "version": "0.2.0",
+            "version": "0.3.0",
             "channels": {
                 "lexical": lexical.to_dict(),
                 "semantic": semantic.to_dict(),
