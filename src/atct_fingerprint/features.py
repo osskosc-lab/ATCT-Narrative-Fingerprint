@@ -19,7 +19,10 @@ def split_sentences(text: str) -> list[str]:
     cleaned = text.strip()
     if not cleaned:
         return []
-    parts = re.split(r"(?<=[。！？!?])[\t ]*|\n+", cleaned)
+    parts = re.split(
+        r"(?<=[。！？])[\t ]*|(?<=[.!?])[\t ]+|\n+",
+        cleaned,
+    )
     return [part.strip() for part in parts if part.strip()]
 
 
@@ -34,9 +37,20 @@ def _normalize_rows(vectors: np.ndarray) -> np.ndarray:
 
 
 def _cosine_distance_rows(left: np.ndarray, right: np.ndarray) -> np.ndarray:
-    left_n = _normalize_rows(left)
-    right_n = _normalize_rows(right)
-    return 1.0 - np.clip(np.sum(left_n * right_n, axis=1), -1.0, 1.0)
+    left_matrix = np.asarray(left, dtype=float)
+    right_matrix = np.asarray(right, dtype=float)
+    if left_matrix.shape != right_matrix.shape:
+        raise ValueError("left and right trajectories must have the same shape")
+
+    left_norms = np.linalg.norm(left_matrix, axis=1)
+    right_norms = np.linalg.norm(right_matrix, axis=1)
+    left_n = left_matrix / np.maximum(left_norms[:, None], 1e-12)
+    right_n = right_matrix / np.maximum(right_norms[:, None], 1e-12)
+    similarity = np.clip(np.sum(left_n * right_n, axis=1), -1.0, 1.0)
+
+    both_zero = (left_norms <= 1e-12) & (right_norms <= 1e-12)
+    similarity[both_zero] = 1.0
+    return 1.0 - similarity
 
 
 def _rolling_trajectory(vectors: np.ndarray, window: int) -> np.ndarray:
@@ -51,6 +65,30 @@ def _rolling_trajectory(vectors: np.ndarray, window: int) -> np.ndarray:
         norm = np.linalg.norm(state)
         states.append(state / max(norm, 1e-12))
     return np.vstack(states)
+
+
+def _align_trajectory_to_sentence_ids(
+    trajectory: np.ndarray,
+    permutation: np.ndarray,
+) -> np.ndarray:
+    """Map perturbed-order states back to the original sentence identities.
+
+    ``permutation[position]`` is the original sentence ID occupying that
+    perturbed position. Re-alignment ensures perturbation distances compare the
+    state attached to the same current sentence, so the metric isolates changed
+    history rather than merely comparing different sentence content at a fixed
+    position.
+    """
+
+    order = np.asarray(permutation, dtype=int)
+    if order.ndim != 1 or len(order) != len(trajectory):
+        raise ValueError("permutation must contain one index per trajectory row")
+    if not np.array_equal(np.sort(order), np.arange(len(order))):
+        raise ValueError("permutation must contain every sentence index exactly once")
+
+    aligned = np.empty_like(trajectory)
+    aligned[order] = trajectory
+    return aligned
 
 
 def _trajectory_distance(left: np.ndarray, right: np.ndarray) -> float:
@@ -139,22 +177,28 @@ def compute_fingerprint(
         shuffled = matrix[permutation]
         for window in clean_windows:
             perturbed = _rolling_trajectory(shuffled, min(window, len(matrix)))
+            aligned = _align_trajectory_to_sentence_ids(perturbed, permutation)
             shuffled_distances[window].append(
-                _trajectory_distance(trajectories[window], perturbed)
+                _trajectory_distance(trajectories[window], aligned)
             )
 
-    reversed_matrix = matrix[::-1]
+    reverse_permutation = identity[::-1]
+    reversed_matrix = matrix[reverse_permutation]
     order_by_window = {
         str(window): float(np.mean(shuffled_distances[window]))
         for window in clean_windows
     }
-    reverse_by_window = {
-        str(window): _trajectory_distance(
-            trajectories[window],
-            _rolling_trajectory(reversed_matrix, min(window, len(matrix))),
+    reverse_by_window = {}
+    for window in clean_windows:
+        reversed_trajectory = _rolling_trajectory(
+            reversed_matrix, min(window, len(matrix))
         )
-        for window in clean_windows
-    }
+        aligned_reverse = _align_trajectory_to_sentence_ids(
+            reversed_trajectory, reverse_permutation
+        )
+        reverse_by_window[str(window)] = _trajectory_distance(
+            trajectories[window], aligned_reverse
+        )
 
     short_window = clean_windows[0]
     long_window = clean_windows[-1]
