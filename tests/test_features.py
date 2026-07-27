@@ -18,6 +18,13 @@ class FeatureTests(unittest.TestCase):
             ["最初の文です。", "次へ進む！", "最後の文です？"],
         )
 
+    def test_closing_quote_stays_with_sentence(self):
+        text = "彼女は叫んだ。\n「欲しい！」\n次へ進む。"
+        self.assertEqual(
+            split_sentences(text),
+            ["彼女は叫んだ。", "「欲しい！」", "次へ進む。"],
+        )
+
     def test_english_sentence_split_preserves_decimal(self):
         text = "Version 3.14 is stable. Next sentence! Final sentence?"
         self.assertEqual(
