@@ -25,4 +25,10 @@ jobs:
       - name: Unit tests
         run: python -m unittest discover -s tests -v
       - name: CLI smoke test
-        run: atct-fingerprint analyze examples/sample_ja.txt --shuffles 4
+        run: |
+          atct-fingerprint analyze examples/sample_ja.txt \
+            --shuffles 8 \
+            --output reports/smoke
+          test -s reports/smoke/fingerprint.json
+          test -s reports/smoke/sentence_map.csv
+          test -s reports/smoke/report.pdf

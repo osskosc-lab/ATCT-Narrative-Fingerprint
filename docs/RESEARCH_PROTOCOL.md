@@ -1,65 +1,106 @@
-# Research protocol
+# ATCT Narrative Fingerprint v0.2 research protocol
 
-## Minimal proposition
+## Fixed proposition
 
-> Do ATCT order-dependence features improve discrimination of text from an
-> unseen AI model over a lexical TF-IDF baseline?
+> Is the original history-conditioned coherence significantly higher than
+> content-preserving order controls?
 
-The first confirmatory run fixes one proposition, one primary metric, one
-baseline, and one falsification experiment.
+This protocol follows one proposition, one primary metric, one baseline, and
+one primary falsification.
 
-| Item | Pre-registered choice |
+| Item | Fixed choice |
 |---|---|
-| Primary metric | AUROC |
-| Baseline | document-level character TF-IDF + logistic regression |
-| Intervention | add seven ATCT structural features |
-| Falsification | independently shuffle sentence order before ATCT extraction |
-| Support threshold | combined AUROC − baseline AUROC ≥ 0.05 |
-| Mechanism failure | combined AUROC − shuffled-control AUROC ≤ 0.01 |
+| Primary metric | `Z_order` |
+| Primary history window | 5 preceding sentences |
+| Baseline | v0.1 history state that includes the current sentence |
+| Primary null | complete random sentence order |
+| Support | `Z_order ≥ 2` |
+| Unsupported | `Z_order < 2` |
+| Mechanism falsification | a fully shuffled input retains comparable Z |
+| Implementation falsification | sentence count or short-sentence rate dominates Z |
 
-## Perturbation alignment
+## History separation
 
-Order and reverse sensitivity compare the causal state attached to the same
-sentence identity before and after intervention. Perturbed trajectories are
-mapped back from their shuffled positions to their original sentence IDs before
-distance is computed.
+For every sentence \(x_t\), v0.2 constructs:
 
-This alignment is mandatory. A position-wise comparison would confound changed
-history with the trivial fact that a different sentence moved into a given
-position, and would therefore overstate the causal order signal.
+\[
+h_t^{(w)} =
+\frac{\sum_{j=1}^{w}\exp[-\lambda(j-1)]x_{t-j}}
+{\sum_{j=1}^{w}\exp[-\lambda(j-1)]}.
+\]
 
-## Required CSV
+It then measures:
 
-The evaluator accepts UTF-8 CSV with these columns:
+\[
+C_t^{(w)}=\cos(x_t,h_t^{(w)}).
+\]
 
-| Column | Meaning |
-|---|---|
-| `text` | complete document with at least four sentences |
-| `label` | `0` human, `1` AI-generated or the declared positive class |
-| `split` | explicit `train` or `test`; never assigned by the evaluator |
-| `source` | human corpus or AI model identifier |
-| `genre` | controlled genre identifier |
+The sentence being evaluated is excluded. The first sentence has no prior
+history, so its sentence-level consistency and Z are reported as unavailable.
 
-AI `source` values must be disjoint between train and test. Normalized duplicate
-documents are also forbidden across splits. The evaluator raises an error
-instead of silently accepting either form of leakage. Both splits must contain
-both labels, and text, source, and genre fields must be non-empty.
+## Null models
 
-## Controls that remain the researcher's responsibility
+| Control | Operation | Intended scale |
+|---|---|---|
+| local | swap one adjacent pair | local causal connection |
+| block | reorder 3–5 sentence blocks | scene or paragraph scale |
+| random | unrestricted non-identity permutation | global order |
+| reverse | reverse the complete document | temporal/argument direction |
+| paragraph | reorder paragraphs, preserve order inside each | local/global separation |
 
-- Match genre, language, prompt, document length, sampling temperature, and
-  editing condition.
-- Keep prompt families from crossing splits.
-- Report every excluded document and exclusion rule.
-- Run multiple fixed seeds and bootstrap confidence intervals before making a
-  research claim.
-- Test AI-only, human-only, AI-edited-human, and human-edited-AI conditions
-  separately.
+All stochastic controls are generated from a fixed caller-visible seed.
+Sentence-level null values are mapped back to original sentence identities
+before Z values are calculated.
 
-## Interpretation
+## Secondary measures
 
-`supported` means only that the fixed dataset passed both numerical gates. It
-does not prove AI authorship for an individual document. `unsupported` means
-incremental AUROC was below 0.05. `mechanism_falsified` means the gain survived
-sentence shuffling within the configured epsilon, so order dependence was not
-the demonstrated mechanism.
+Secondary measures cannot overturn the primary gate:
+
+- normalized history curvature and turning-point Z;
+- long-history gain \(C^{(13)}-C^{(3)}\);
+- opening/ending transformed closure;
+- distance-weighted transformed motif recurrence;
+- exact duplicate rate;
+- theme cohesion;
+- between-segment diversity.
+
+Exact near-duplicates are excluded from transformed motif return. This keeps a
+copied paragraph from being labeled as foreshadowing recovery.
+
+## Encoder separation
+
+TF-IDF is a lexical channel used for CI and fast diagnostics.
+Multilingual-E5 is the semantic channel required for Japanese production
+claims. `--encoder both` produces separate lexical and semantic fingerprints;
+the channels are not averaged into one score.
+
+## Reporting
+
+The report preserves:
+
+- aggregate control distributions and `Z_order`;
+- every sentence's evidence and structural role;
+- ranked turning points;
+- transformed motif and duplicate pair tables;
+- surface-confound warnings;
+- editing-risk locations;
+- the seed and null sample count.
+
+No 0–100 writing-quality score is emitted.
+
+## Confirmatory run requirements
+
+- Freeze source texts, exclusions, E5 model revision, seed list, decay,
+  history windows, motif thresholds, and null sample count before running.
+- Use at least 200 shuffles per document and 30 fixed seeds for stability.
+- Report the full Z distribution and sign agreement, not only a favorable seed.
+- Match genre, language, editing condition, prompt family, and document length.
+- Keep raw reports for negative and mechanism-falsified cases.
+
+## Stop conditions
+
+- **Support:** `Z_order ≥ 2` and the fully shuffled input loses the signal.
+- **Unsupported:** `Z_order < 2`.
+- **Mechanism falsified:** fully shuffled input retains comparable evidence.
+- **Implementation falsified:** split/merge, short-sentence rate, or document
+  length dominates the result.

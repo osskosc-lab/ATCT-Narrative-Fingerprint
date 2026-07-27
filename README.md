@@ -1,38 +1,99 @@
-# ATCT Narrative Fingerprint
+# ATCT Narrative Fingerprint v0.2
 
 **文章がどのような履歴依存構造で生成されたかを測るチェッカー**
 
-ATCT Narrative Fingerprint treats a document as an irreversible trajectory,
-not a bag of interchangeable sentences:
+v0.2 changes the central question from:
+
+> Does this document have order structure?
+
+to:
+
+> Is the original history-conditioned coherence significantly higher than
+> content-preserving order controls?
+
+The primary metric is:
 
 \[
-s_1 \rightarrow s_2 \rightarrow \cdots \rightarrow s_T
+Z_{\mathrm{order}} =
+\frac{
+C_{\mathrm{original}}-\mu(C_{\mathrm{random}})
+}{
+\sigma(C_{\mathrm{random}})+\varepsilon
+}
 \]
 
-It does **not** claim to prove whether AI or a human wrote a text. It measures
-how strongly the observed structure depends on sentence order, long-range
-history, local-to-global coherence, turning points, and semantic recurrence.
+where the state used to evaluate sentence \(x_t\) is built only from preceding
+sentences:
 
-## Six diagnostic families
+\[
+h_t^{(w)} =
+\frac{\sum_{j=1}^{w}\alpha_j x_{t-j}}
+{\sum_{j=1}^{w}\alpha_j},
+\qquad
+C_t^{(w)}=\cos(x_t,h_t^{(w)}).
+\]
 
-| Diagnostic | Question |
+The current sentence is never included in its own history state.
+
+## Interpretation boundary
+
+This is not an AI-authorship detector, probability, or writing-quality score.
+It reports statistical evidence and locations for order-conditioned narrative
+structure. The former fixed 0–100 aggregate display score has been removed.
+
+| `Z_order` | Descriptive interpretation |
+|---:|---|
+| `< 1` | weak evidence |
+| `1–2` | limited order dependence |
+| `2–3` | clear order dependence |
+| `≥ 3` | very strong order dependence |
+
+The threshold is a research convention, not a universal calibration.
+
+## v0.2 outputs
+
+### Structure strength
+
+- random-shuffle `Z_order`;
+- adjacent-swap and 3–5-sentence block controls;
+- reverse directionality;
+- long-history predictive gain \(C^{(13)}-C^{(3)}\);
+- normalized turning-point Z.
+
+### Structure type
+
+- `linear`;
+- `circular`;
+- `stepwise`;
+- `branching`;
+- `repetitive`;
+- `mosaic`;
+- `weak_or_mixed`.
+
+### Explanation and editing risks
+
+- one row per sentence with \(C_t\), history Z, history-state change, curvature,
+  turning Z, long-history gain, and structural role;
+- transformed motif returns separated from exact copied meaning;
+- theme cohesion separated from between-segment diversity;
+- short-sentence rate, length variance, lexical diversity, and technical-term
+  density;
+- explicit risk locations for duplication, topic deviation, unexplained
+  transitions, short-sentence concentration, and opening/body mismatch.
+
+## Encoder roles
+
+| Use | Encoder |
 |---|---|
-| Order sensitivity | Does the trajectory change under sentence shuffling? |
-| Reverse sensitivity | Does reversing the text destroy its direction? |
-| Long-history dependence | Do wide causal windows differ from short ones? |
-| Local/global consistency | How do sentences align with the global theme? |
-| Turning-point magnitude | Do apparent transitions move in vector space? |
-| Semantic redundancy | Do non-adjacent sentences repeat the same meaning? |
+| CI and unit tests | TF-IDF |
+| fast lexical smoke checks | TF-IDF |
+| Japanese production analysis | multilingual-E5 |
+| motif analysis | multilingual-E5 |
+| lexical repetition | TF-IDF |
+| comparative study | `--encoder both` |
 
-The analyzer uses causal windows \(w \in \{3,5,8,13\}\). Raw values are the
-research features. The 0–100 values are bounded display transforms, **not
-calibrated probabilities**.
-
-For shuffle and reverse interventions, the perturbed trajectory is re-aligned
-by sentence identity before distance is calculated. Each sentence is therefore
-compared with itself under a changed preceding history. This prevents the order
-metric from merely counting that different sentence content moved into the same
-absolute position.
+TF-IDF and E5 are separate analysis channels. TF-IDF smoke output must not be
+treated as a substitute for semantic production analysis.
 
 ## Install
 
@@ -40,69 +101,64 @@ absolute position.
 python -m pip install -e .
 ```
 
-For the recommended multilingual semantic backend:
+For multilingual E5:
 
 ```bash
 python -m pip install -e ".[semantic]"
 ```
 
-## Analyze a document
-
-Fast, deterministic lexical smoke run:
+## Analyze and create a report bundle
 
 ```bash
-atct-fingerprint analyze examples/sample_ja.txt --encoder tfidf
+atct-fingerprint analyze article.txt \
+  --encoder e5 \
+  --shuffles 200 \
+  --controls local,block,random,reverse \
+  --sentence-map \
+  --motif-analysis \
+  --output reports/article
 ```
 
-Semantic run with multilingual E5:
+Generated files:
 
-```bash
-atct-fingerprint analyze examples/sample_ja.txt --encoder e5
+```text
+reports/article/
+├── fingerprint.json
+├── sentence_map.csv
+├── turning_points.csv
+├── motif_pairs.csv
+├── report.md
+└── report.pdf
 ```
 
-Output is JSON containing raw features, window-level perturbation results,
-display scores, seed, shuffle count, and an explicit non-authorship warning.
+The PDF is a portable summary. Japanese sentence-level evidence remains in the
+UTF-8 JSON, CSV, and Markdown outputs.
 
-## Test the minimal research proposition
+## Secondary unknown-model benchmark
 
-The fixed proposition is:
-
-> Do ATCT order-dependence features improve AUROC on an unseen AI model by at
-> least 0.05 over a document-level lexical TF-IDF baseline?
-
-Prepare an explicit train/test CSV using
-[`examples/dataset_template.csv`](examples/dataset_template.csv), then run:
+The v0.1 AUROC experiment remains available as a secondary benchmark:
 
 ```bash
 atct-fingerprint evaluate data/confirmatory.csv --encoder e5
 ```
 
-The evaluator reports:
+It rejects AI-source overlap and normalized duplicate documents between train
+and test. This benchmark does not replace the v0.2 primary document-level
+`Z_order` proposition.
 
-- lexical baseline AUROC;
-- lexical + ATCT AUROC;
-- sentence-shuffled control AUROC;
-- incremental improvement and mechanism drop;
-- `supported`, `unsupported`, or `mechanism_falsified`;
-- source-leakage, duplicate-document, genre, and length audits.
+## Validation status
 
-It rejects a test split whose AI model identifier also occurs in training. It
-also rejects normalized duplicate documents shared by train and test, empty
-metadata, and documents with fewer than four sentences. See
-[`docs/RESEARCH_PROTOCOL.md`](docs/RESEARCH_PROTOCOL.md) before collecting or
-interpreting data.
+The implementation includes deterministic tests for current-sentence
+exclusion, random-null behavior, local/block/random/reverse controls, 30-seed
+sign stability, shuffled-chain falsification, paragraph-order preservation,
+motif deletion, exact-copy rejection, and report generation.
 
-## Current scope
-
-This is an MVP for feature extraction and falsifiable evaluation design.
-It has no trained authorship model and includes no benchmark corpus. Claims
-about robustness to paraphrasing, human editing, translation, or a particular
-AI model require controlled data and confidence intervals.
+The PR remains a research preview until real Japanese E5 corpora pass the full
+acceptance matrix, especially literal sentence split/merge tolerance within
+10%. See [`docs/VALIDATION_MATRIX.md`](docs/VALIDATION_MATRIX.md).
 
 ## Development
 
 ```bash
 python -m unittest discover -s tests -v
 ```
-
-CI runs the unit suite and CLI smoke test on Python 3.10 and 3.12.

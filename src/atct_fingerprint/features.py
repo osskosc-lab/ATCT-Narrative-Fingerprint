@@ -1,4 +1,4 @@
-"""Order-sensitive ATCT narrative features."""
+"""ATCT Narrative Fingerprint v0.2 statistical history evidence."""
 
 from __future__ import annotations
 
@@ -8,7 +8,26 @@ from typing import Mapping, Sequence
 
 import numpy as np
 
+from .diagnostics import confound_audit, editing_risks, theme_cohesion
 from .encoders import SentenceEncoder, TfidfSentenceEncoder
+from .history import (
+    EPSILON,
+    causal_history_states,
+    consistency_for_permutation,
+    history_change,
+    history_consistency,
+    long_history_gain,
+    mean_consistency,
+    normalized_curvature,
+    normalize_rows,
+)
+from .motifs import MotifAnalysis, analyze_motifs
+from .null_models import (
+    CONTROL_NAMES,
+    generate_permutations,
+    paragraph_swap,
+)
+from .segmentation import analysis_segments, paragraph_indices, segment_diversity
 
 DEFAULT_WINDOWS = (3, 5, 8, 13)
 _CLOSING_PUNCTUATION = "」』】）》〉〕〗〙〛”’\"'"
@@ -24,7 +43,6 @@ def split_sentences(text: str) -> list[str]:
     cleaned = text.strip()
     if not cleaned:
         return []
-
     sentences: list[str] = []
     for raw_line in cleaned.splitlines():
         line = raw_line.strip()
@@ -43,106 +61,113 @@ def split_sentences(text: str) -> list[str]:
     return sentences
 
 
-def _normalize_rows(vectors: np.ndarray) -> np.ndarray:
-    matrix = np.asarray(vectors, dtype=float)
-    if matrix.ndim != 2:
-        raise ValueError("vectors must be a two-dimensional array")
-    if not np.isfinite(matrix).all():
-        raise ValueError("vectors must contain only finite values")
-    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    return matrix / np.maximum(norms, 1e-12)
-
-
-def _cosine_distance_rows(left: np.ndarray, right: np.ndarray) -> np.ndarray:
-    left_matrix = np.asarray(left, dtype=float)
-    right_matrix = np.asarray(right, dtype=float)
-    if left_matrix.shape != right_matrix.shape:
-        raise ValueError("left and right trajectories must have the same shape")
-
-    left_norms = np.linalg.norm(left_matrix, axis=1)
-    right_norms = np.linalg.norm(right_matrix, axis=1)
-    left_n = left_matrix / np.maximum(left_norms[:, None], 1e-12)
-    right_n = right_matrix / np.maximum(right_norms[:, None], 1e-12)
-    similarity = np.clip(np.sum(left_n * right_n, axis=1), -1.0, 1.0)
-
-    both_zero = (left_norms <= 1e-12) & (right_norms <= 1e-12)
-    similarity[both_zero] = 1.0
-    return 1.0 - similarity
-
-
-def _rolling_trajectory(vectors: np.ndarray, window: int) -> np.ndarray:
-    """Build a causal, recency-weighted state trajectory."""
-
-    states: list[np.ndarray] = []
-    for index in range(len(vectors)):
-        start = max(0, index - window + 1)
-        chunk = vectors[start : index + 1]
-        weights = np.exp(np.linspace(-1.0, 0.0, len(chunk)))
-        state = np.average(chunk, axis=0, weights=weights)
-        norm = np.linalg.norm(state)
-        states.append(state / max(norm, 1e-12))
-    return np.vstack(states)
-
-
-def _align_trajectory_to_sentence_ids(
-    trajectory: np.ndarray,
-    permutation: np.ndarray,
-) -> np.ndarray:
-    """Map perturbed-order states back to the original sentence identities."""
-
-    order = np.asarray(permutation, dtype=int)
-    if order.ndim != 1 or len(order) != len(trajectory):
-        raise ValueError("permutation must contain one index per trajectory row")
-    if not np.array_equal(np.sort(order), np.arange(len(order))):
-        raise ValueError("permutation must contain every sentence index exactly once")
-
-    aligned = np.empty_like(trajectory)
-    aligned[order] = trajectory
-    return aligned
-
-
-def _trajectory_distance(left: np.ndarray, right: np.ndarray) -> float:
-    return float(np.mean(_cosine_distance_rows(left, right)))
-
-
-def _nonadjacent_redundancy(vectors: np.ndarray, threshold: float) -> float:
-    matches = 0
-    pairs = 0
-    normalized = _normalize_rows(vectors)
-    for left in range(len(normalized)):
-        for right in range(left + 2, len(normalized)):
-            pairs += 1
-            similarity = float(np.dot(normalized[left], normalized[right]))
-            matches += int(similarity >= threshold)
-    return matches / pairs if pairs else 0.0
-
-
-def _score(value: float, scale: float = 1.0) -> float:
-    """Map a descriptive non-negative value to a bounded display score."""
-
-    return round(100.0 * (1.0 - np.exp(-max(value, 0.0) / scale)), 1)
+@dataclass(frozen=True)
+class ControlSummary:
+    original: float
+    null_mean: float
+    null_std: float
+    effect: float
+    z: float | None
+    samples: int
 
 
 @dataclass(frozen=True)
 class FingerprintResult:
-    """Raw diagnostic features and uncalibrated display scores."""
-
+    version: str
     sentence_count: int
-    order_sensitivity: float
-    reverse_sensitivity: float
-    long_history_dependence: float
-    local_global_consistency: float
-    local_global_variation: float
-    turning_point_magnitude: float
-    semantic_redundancy: float
-    order_by_window: Mapping[str, float]
-    reverse_by_window: Mapping[str, float]
-    display_scores: Mapping[str, float]
+    primary_metric: str
+    primary_window: int
+    order_z: float
+    gate: str
+    original_consistency: float
+    controls: Mapping[str, ControlSummary]
+    reverse_directionality: float
+    history_consistency_by_window: Mapping[str, float]
+    long_history_gain: float
+    turning_point_z: float
+    theme_cohesion: float
+    segment_diversity: float
+    motif_analysis: MotifAnalysis
+    structure_type: str
+    sentence_map: tuple[Mapping[str, object], ...]
+    confound_audit: Mapping[str, object]
+    editing_risks: tuple[Mapping[str, object], ...]
     seed: int
     shuffle_count: int
+    disclaimer: str
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
+
+
+def _z_score(original: float, values: np.ndarray) -> tuple[float, float, float]:
+    mean = float(np.mean(values))
+    std = float(np.std(values, ddof=0))
+    z_value = (original - mean) / (std + EPSILON)
+    return mean, std, float(z_value)
+
+
+def _control_summary(
+    original: float,
+    values: Sequence[float],
+    *,
+    deterministic: bool = False,
+) -> ControlSummary:
+    array = np.asarray(values, dtype=float)
+    mean = float(np.mean(array))
+    std = float(np.std(array))
+    z_value = None if deterministic else float((original - mean) / (std + EPSILON))
+    return ControlSummary(
+        original=original,
+        null_mean=mean,
+        null_std=std,
+        effect=original - mean,
+        z=z_value,
+        samples=len(array),
+    )
+
+
+def _sentence_role(
+    index: int,
+    history_z: float,
+    turn_z: float,
+    motif_analysis: MotifAnalysis,
+) -> str:
+    motif_returns = {pair.second_index for pair in motif_analysis.motif_pairs}
+    if index == 0:
+        return "opening_anchor"
+    if index in motif_returns:
+        return "motif_return"
+    if turn_z >= 2.0:
+        return "structural_turn"
+    if history_z >= 2.0:
+        return "history_supported"
+    if history_z <= -2.0:
+        return "unexplained_transition"
+    return "continuation"
+
+
+def _structure_type(
+    *,
+    order_z: float,
+    reverse_directionality: float,
+    long_gain: float,
+    segment_distance: float,
+    motifs: MotifAnalysis,
+) -> str:
+    if motifs.exact_duplicate_rate >= 0.15:
+        return "repetitive"
+    if motifs.transformed_closure >= 0.55 and motifs.motif_recurrence > 0:
+        return "circular"
+    if segment_distance >= 0.65 and order_z < 1.0:
+        return "mosaic"
+    if segment_distance >= 0.55 and order_z >= 2.0:
+        return "branching"
+    if long_gain >= 0.04 and order_z >= 1.0:
+        return "stepwise"
+    if order_z >= 2.0 and reverse_directionality > 0:
+        return "linear"
+    return "weak_or_mixed"
 
 
 def compute_fingerprint(
@@ -150,106 +175,181 @@ def compute_fingerprint(
     vectors: np.ndarray,
     *,
     windows: Sequence[int] = DEFAULT_WINDOWS,
-    shuffle_count: int = 32,
+    primary_window: int = 5,
+    shuffle_count: int = 200,
+    controls: Sequence[str] = CONTROL_NAMES,
     seed: int = 42,
-    redundancy_threshold: float = 0.86,
+    decay: float = 0.35,
+    paragraphs: Sequence[Sequence[int]] | None = None,
+    segments: Sequence[Sequence[int]] | None = None,
 ) -> FingerprintResult:
-    """Compute a descriptive fingerprint from sentences and their vectors."""
+    """Measure history-conditioned coherence against order null models."""
 
     if len(sentences) < 4:
         raise ValueError("at least four sentences are required")
-    if shuffle_count < 1:
-        raise ValueError("shuffle_count must be positive")
-    clean_windows = tuple(sorted({int(window) for window in windows if window >= 2}))
-    if not clean_windows:
-        raise ValueError("at least one window >= 2 is required")
+    if shuffle_count < 2:
+        raise ValueError("shuffle_count must be at least two for a Z score")
+    selected_controls = tuple(dict.fromkeys(controls))
+    unknown = set(selected_controls).difference(CONTROL_NAMES)
+    if unknown:
+        raise ValueError(f"unknown controls: {sorted(unknown)}")
+    if "random" not in selected_controls:
+        raise ValueError("random control is required for Z_order")
 
-    matrix = _normalize_rows(vectors)
+    matrix = normalize_rows(vectors)
     if len(matrix) != len(sentences):
         raise ValueError("sentence and vector counts must match")
+    clean_windows = tuple(sorted({int(value) for value in windows if value >= 1}))
+    if primary_window not in clean_windows:
+        clean_windows = tuple(sorted((*clean_windows, primary_window)))
 
-    trajectories = {
-        window: _rolling_trajectory(matrix, min(window, len(matrix)))
-        for window in clean_windows
-    }
+    states = causal_history_states(matrix, primary_window, decay=decay)
+    original_sentence_consistency = history_consistency(matrix, states)
+    original_consistency = mean_consistency(matrix, states)
+    original_curvature = normalized_curvature(states)
+    original_turn_mean = float(np.mean(original_curvature))
+
     rng = np.random.default_rng(seed)
-    shuffled_distances = {window: [] for window in clean_windows}
-    identity = np.arange(len(matrix))
-    for _ in range(shuffle_count):
-        permutation = rng.permutation(len(matrix))
-        if np.array_equal(permutation, identity):
-            permutation = np.roll(permutation, 1)
-        shuffled = matrix[permutation]
-        for window in clean_windows:
-            perturbed = _rolling_trajectory(shuffled, min(window, len(matrix)))
-            aligned = _align_trajectory_to_sentence_ids(perturbed, permutation)
-            shuffled_distances[window].append(
-                _trajectory_distance(trajectories[window], aligned)
+    control_summaries: dict[str, ControlSummary] = {}
+    random_sentence_values: list[np.ndarray] = []
+    random_curvature_values: list[np.ndarray] = []
+    for control in selected_controls:
+        permutations = generate_permutations(
+            control, len(matrix), shuffle_count, rng
+        )
+        aggregate: list[float] = []
+        for order in permutations:
+            score, aligned_consistency, aligned_states = consistency_for_permutation(
+                matrix, order, primary_window, decay=decay
             )
+            aggregate.append(score)
+            if control == "random":
+                random_sentence_values.append(aligned_consistency)
+                perturbed_curvature = normalized_curvature(
+                    causal_history_states(matrix[order], primary_window, decay=decay)
+                )
+                aligned_curvature = np.empty_like(perturbed_curvature)
+                aligned_curvature[order] = perturbed_curvature
+                random_curvature_values.append(aligned_curvature)
+        control_summaries[control] = _control_summary(
+            original_consistency,
+            aggregate,
+            deterministic=control == "reverse",
+        )
 
-    reverse_permutation = identity[::-1]
-    reversed_matrix = matrix[reverse_permutation]
-    order_by_window = {
-        str(window): float(np.mean(shuffled_distances[window]))
-        for window in clean_windows
-    }
-    reverse_by_window = {}
+    if paragraphs and len(paragraphs) >= 2:
+        paragraph_values = []
+        for _ in range(shuffle_count):
+            order = paragraph_swap(paragraphs, rng)
+            score, _, _ = consistency_for_permutation(
+                matrix, order, primary_window, decay=decay
+            )
+            paragraph_values.append(score)
+        control_summaries["paragraph"] = _control_summary(
+            original_consistency, paragraph_values
+        )
+
+    random_summary = control_summaries["random"]
+    order_z = float(random_summary.z or 0.0)
+    reverse = control_summaries.get("reverse")
+    reverse_directionality = reverse.effect if reverse else 0.0
+
+    consistency_by_window = {}
     for window in clean_windows:
-        reversed_trajectory = _rolling_trajectory(
-            reversed_matrix, min(window, len(matrix))
-        )
-        aligned_reverse = _align_trajectory_to_sentence_ids(
-            reversed_trajectory, reverse_permutation
-        )
-        reverse_by_window[str(window)] = _trajectory_distance(
-            trajectories[window], aligned_reverse
-        )
-
-    short_window = clean_windows[0]
-    long_window = clean_windows[-1]
-    long_history = _trajectory_distance(
-        trajectories[short_window], trajectories[long_window]
+        window_states = causal_history_states(matrix, window, decay=decay)
+        consistency_by_window[str(window)] = mean_consistency(matrix, window_states)
+    long_gain, sentence_long_gain = long_history_gain(
+        matrix,
+        short_window=min(clean_windows),
+        long_window=max(clean_windows),
+        decay=decay,
     )
 
-    global_state = np.mean(matrix, axis=0)
-    global_state /= max(np.linalg.norm(global_state), 1e-12)
-    local_global = np.clip(matrix @ global_state, -1.0, 1.0)
+    random_sentence_array = np.asarray(random_sentence_values)
+    sentence_null_mean = np.mean(random_sentence_array, axis=0)
+    sentence_null_std = np.std(random_sentence_array, axis=0)
+    sentence_z = (
+        original_sentence_consistency - sentence_null_mean
+    ) / (sentence_null_std + EPSILON)
 
-    pivot_window = min(clean_windows, key=lambda value: abs(value - 5))
-    pivot = trajectories[pivot_window]
-    second_difference = pivot[2:] - (2.0 * pivot[1:-1]) + pivot[:-2]
-    turning_point = float(np.mean(np.linalg.norm(second_difference, axis=1)))
+    random_curvature_array = np.asarray(random_curvature_values)
+    curvature_null_mean = np.mean(random_curvature_array, axis=0)
+    curvature_null_std = np.std(random_curvature_array, axis=0)
+    turn_sentence_z = (
+        original_curvature - curvature_null_mean
+    ) / (curvature_null_std + EPSILON)
+    null_turn_means = np.mean(random_curvature_array, axis=1)
+    _, _, turning_point_z = _z_score(original_turn_mean, null_turn_means)
 
-    order = float(np.mean(list(order_by_window.values())))
-    reverse = float(np.mean(list(reverse_by_window.values())))
-    redundancy = _nonadjacent_redundancy(matrix, redundancy_threshold)
-    consistency = float(np.mean((local_global + 1.0) / 2.0))
-    variation = float(np.std(local_global))
+    motifs = analyze_motifs(matrix, sentences)
+    changes = history_change(states)
+    sentence_rows = tuple(
+        {
+            "index": index,
+            "sentence_number": index + 1,
+            "text": sentence,
+            "history_consistency": (
+                None if index == 0 else float(original_sentence_consistency[index])
+            ),
+            "history_z": None if index == 0 else float(sentence_z[index]),
+            "history_change": float(changes[index]),
+            "curvature": None if index < 2 else float(original_curvature[index]),
+            "turn_z": None if index < 2 else float(turn_sentence_z[index]),
+            "long_history_gain": (
+                None if index == 0 else float(sentence_long_gain[index])
+            ),
+            "role": _sentence_role(
+                index, float(sentence_z[index]), float(turn_sentence_z[index]), motifs
+            ),
+        }
+        for index, sentence in enumerate(sentences)
+    )
 
-    scores = {
-        "文順序依存性": _score(order, 0.45),
-        "逆順感度": _score(reverse, 0.45),
-        "長距離履歴依存性": _score(long_history, 0.30),
-        "局所・大域整合性": round(100.0 * consistency, 1),
-        "局所的揺らぎ": _score(variation, 0.25),
-        "転換点の実質性": _score(turning_point, 0.75),
-        "意味反復度": round(100.0 * redundancy, 1),
-    }
+    theme_value, theme_values = theme_cohesion(matrix)
+    selected_segments = list(segments or analysis_segments(len(sentences), paragraphs))
+    segment_distance = segment_diversity(matrix, selected_segments)
+    confounds = confound_audit(sentences)
+    risks = editing_risks(
+        sentences,
+        theme_similarities=theme_values,
+        sentence_rows=sentence_rows,
+        duplicate_rate=motifs.exact_duplicate_rate,
+        confounds=confounds,
+    )
+    structure = _structure_type(
+        order_z=order_z,
+        reverse_directionality=reverse_directionality,
+        long_gain=long_gain,
+        segment_distance=segment_distance,
+        motifs=motifs,
+    )
 
     return FingerprintResult(
+        version="0.2.0",
         sentence_count=len(sentences),
-        order_sensitivity=order,
-        reverse_sensitivity=reverse,
-        long_history_dependence=long_history,
-        local_global_consistency=consistency,
-        local_global_variation=variation,
-        turning_point_magnitude=turning_point,
-        semantic_redundancy=redundancy,
-        order_by_window=order_by_window,
-        reverse_by_window=reverse_by_window,
-        display_scores=scores,
+        primary_metric="Z_order",
+        primary_window=primary_window,
+        order_z=order_z,
+        gate="supported" if order_z >= 2.0 else "unsupported",
+        original_consistency=original_consistency,
+        controls=control_summaries,
+        reverse_directionality=reverse_directionality,
+        history_consistency_by_window=consistency_by_window,
+        long_history_gain=long_gain,
+        turning_point_z=turning_point_z,
+        theme_cohesion=theme_value,
+        segment_diversity=segment_distance,
+        motif_analysis=motifs,
+        structure_type=structure,
+        sentence_map=sentence_rows,
+        confound_audit=confounds,
+        editing_risks=tuple(risks),
         seed=seed,
         shuffle_count=shuffle_count,
+        disclaimer=(
+            "Z_order is statistical evidence for order-conditioned coherence. "
+            "It is not an authorship probability or a writing-quality score."
+        ),
     )
 
 
@@ -258,18 +358,23 @@ def analyze_text(
     *,
     encoder: SentenceEncoder | None = None,
     windows: Sequence[int] = DEFAULT_WINDOWS,
-    shuffle_count: int = 32,
+    primary_window: int = 5,
+    shuffle_count: int = 200,
+    controls: Sequence[str] = CONTROL_NAMES,
     seed: int = 42,
 ) -> FingerprintResult:
-    """Split, encode, and analyze a document."""
-
     sentences = split_sentences(text)
     selected_encoder = encoder or TfidfSentenceEncoder()
     vectors = selected_encoder.encode(sentences)
+    paragraphs = paragraph_indices(text, split_sentences)
     return compute_fingerprint(
         sentences,
         vectors,
         windows=windows,
+        primary_window=primary_window,
         shuffle_count=shuffle_count,
+        controls=controls,
         seed=seed,
+        paragraphs=paragraphs,
+        segments=analysis_segments(len(sentences), paragraphs),
     )

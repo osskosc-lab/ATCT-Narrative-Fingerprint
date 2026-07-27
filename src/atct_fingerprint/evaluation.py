@@ -20,13 +20,13 @@ from .encoders import SentenceEncoder, SentenceTransformerEncoder, TfidfSentence
 from .features import analyze_text, split_sentences
 
 FEATURE_NAMES = (
-    "order_sensitivity",
-    "reverse_sensitivity",
-    "long_history_dependence",
-    "local_global_consistency",
-    "local_global_variation",
-    "turning_point_magnitude",
-    "semantic_redundancy",
+    "order_z",
+    "reverse_directionality",
+    "long_history_gain",
+    "turning_point_z",
+    "theme_cohesion",
+    "segment_diversity",
+    "exact_duplicate_rate",
 )
 
 
@@ -138,8 +138,17 @@ def validate_protocol(rows: Sequence[DatasetRow]) -> dict[str, object]:
 
 
 def _feature_row(text: str, encoder: SentenceEncoder, seed: int) -> list[float]:
-    result = analyze_text(text, encoder=encoder, seed=seed)
-    return [float(getattr(result, name)) for name in FEATURE_NAMES]
+    result = analyze_text(text, encoder=encoder, seed=seed, shuffle_count=32)
+    values = {
+        "order_z": result.order_z,
+        "reverse_directionality": result.reverse_directionality,
+        "long_history_gain": result.long_history_gain,
+        "turning_point_z": result.turning_point_z,
+        "theme_cohesion": result.theme_cohesion,
+        "segment_diversity": result.segment_diversity,
+        "exact_duplicate_rate": result.motif_analysis.exact_duplicate_rate,
+    }
+    return [float(values[name]) for name in FEATURE_NAMES]
 
 
 def _shuffle_text(text: str, rng: np.random.Generator) -> str:

@@ -2,6 +2,7 @@
 
 from .encoders import SentenceTransformerEncoder, TfidfSentenceEncoder
 from .features import FingerprintResult, analyze_text, compute_fingerprint, split_sentences
+from .reporting import write_report_bundle
 
 __all__ = [
     "FingerprintResult",
@@ -10,6 +11,7 @@ __all__ = [
     "analyze_text",
     "compute_fingerprint",
     "split_sentences",
+    "write_report_bundle",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
