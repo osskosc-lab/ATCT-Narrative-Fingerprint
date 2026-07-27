@@ -1,4 +1,4 @@
-# ATCT Narrative Fingerprint v0.3 research protocol
+# ATCT Narrative Fingerprint v0.4 research protocol
 
 ## Fixed proposition
 
@@ -21,7 +21,7 @@ one primary falsification.
 
 ## History separation
 
-For every prose sentence \(x_t\), v0.3 constructs:
+For every prose sentence \(x_t\), v0.4 constructs:
 
 \[
 h_t^{(w)} =

@@ -1,4 +1,4 @@
-# v0.3 validation matrix
+# v0.4 validation matrix
 
 The code-level tests below validate implementation behavior. They are not a
 substitute for a confirmatory Japanese multilingual-E5 corpus.
@@ -22,9 +22,13 @@ substitute for a confirmatory Japanese multilingual-E5 corpus.
 | Licensed Jump | explicit boundary markers suppress unexplained-leap misclassification | passed |
 | closing motif deletion | removing the final return lowers closure | passed |
 | copied paragraph rejection | exact duplicates excluded from transformed motif return | passed |
+| motif role transition | distant changed context is separated from an exact sentence return | passed |
+| conceptual branch | explicit `それとも` alternatives are localized | passed |
+| question–answer closure | opening question is matched to a related ending answer | passed |
+| claim-scope audit | dropped qualifier is flagged; explicit re-scoping is not | passed |
 | current-sentence exclusion | new causal state omits \(x_t\) and improves the synthetic gap | passed |
 | evidence localization | sentence map identifies history and turning evidence | passed |
-| report bundle | JSON, four CSV diagnostics, Markdown, and PDF generated | passed |
+| report bundle | JSON, nine CSV diagnostics, Markdown, and PDF generated | passed |
 | frozen autoregressive direction model | requires model revision and corpus freeze | pending |
 
 Operational status remains **research preview** while literal split/merge

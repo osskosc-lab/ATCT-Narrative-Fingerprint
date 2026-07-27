@@ -1,4 +1,4 @@
-# ATCT Narrative Fingerprint v0.3
+# ATCT Narrative Fingerprint v0.4
 
 **文章がどのような履歴依存構造で生成されたかを測るチェッカー**
 
@@ -46,7 +46,7 @@ structure. The former fixed 0–100 aggregate display score has been removed.
 
 The threshold is a research convention, not a universal calibration.
 
-## v0.3 changes
+## v0.4 changes
 
 Markdown input is separated before semantic analysis:
 
@@ -82,6 +82,21 @@ Explicit boundary statements such as "this is a metaphor" or "does not prove"
 are recorded as `Licensed Jump` evidence and are not automatically reported as
 unexplained logical leaps.
 
+The v0.4 explanation layer adds four evidence-retrieval diagnostics:
+
+- **Motif Role Transition** follows a repeated phrase across sentence contexts
+  and separates stable reuse from a distant return with changed context;
+- **Concept Branch** retrieves explicit contrasts and alternatives such as
+  `not ... but` and `それとも`;
+- **Question–Answer Closure** ranks candidate ending statements against
+  opening questions;
+- **Claim Scope Audit** flags a qualified premise that is followed by a related
+  categorical assertion without the original qualifier.
+
+Every diagnostic returns sentence indices, original text, and matching
+evidence. These are heuristic inspection aids, not proof of authorial intent,
+logical validity, or literary quality. `Z_order` remains the only primary gate.
+
 ## Outputs
 
 ### Structure strength
@@ -111,6 +126,8 @@ unexplained logical leaps.
   Jump status, and structural role;
 - Markdown layer inventory and section-transition graph;
 - transformed motif returns separated from exact copied meaning;
+- repeated-motif context changes, explicit conceptual branches, opening
+  question/ending answer candidates, and claim-scope warnings;
 - theme cohesion separated from between-segment diversity;
 - short-sentence rate, length variance, lexical diversity, and technical-term
   density;
@@ -163,6 +180,10 @@ reports/article/
 ├── sentence_map.csv
 ├── turning_points.csv
 ├── motif_pairs.csv
+├── motif_role_transitions.csv
+├── concept_branches.csv
+├── qa_closure.csv
+├── claim_scope_audit.csv
 ├── section_graph.csv
 ├── document_blocks.csv
 ├── report.md
@@ -181,17 +202,18 @@ atct-fingerprint evaluate data/confirmatory.csv --encoder e5
 ```
 
 It rejects AI-source overlap and normalized duplicate documents between train
-and test. This benchmark does not replace the v0.3 primary document-level
+and test. This benchmark does not replace the v0.4 primary document-level
 `Z_order` proposition.
 
 ## Validation status
 
-The implementation includes 29 deterministic tests. They cover
+The implementation includes 36 deterministic tests. They cover
 current-sentence exclusion, Markdown layer separation, hierarchical order
 controls, reversal of the asymmetric direction score, rolling prediction
 without future-target leakage, 30-seed sign stability, shuffled-chain
 falsification, motif deletion, exact-copy rejection, Licensed Jump handling,
-and report generation.
+motif role shifts, contrastive branches, question–answer closure, claim-scope
+drift, and report generation.
 
 The PR remains a research preview until real Japanese E5 corpora pass the full
 acceptance matrix, especially literal sentence split/merge tolerance within

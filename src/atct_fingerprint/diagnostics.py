@@ -121,6 +121,7 @@ def editing_risks(
     duplicate_rate: float,
     confounds: Mapping[str, object],
     licensed_indices: Sequence[int] = (),
+    scope_warning_indices: Sequence[int] = (),
 ) -> list[dict[str, object]]:
     risks: list[dict[str, object]] = []
     if duplicate_rate > 0.10:
@@ -161,4 +162,11 @@ def editing_risks(
         risks.append({"risk": "conclusion_first", "sentences": [0]})
     if len(theme_similarities) >= 4 and float(np.mean(theme_similarities[:2])) < 0.2:
         risks.append({"risk": "opening_body_mismatch", "sentences": [0, 1]})
+    if scope_warning_indices:
+        risks.append(
+            {
+                "risk": "claim_scope_drift",
+                "sentences": sorted(set(int(value) for value in scope_warning_indices)),
+            }
+        )
     return risks

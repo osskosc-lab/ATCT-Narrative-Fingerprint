@@ -1,4 +1,4 @@
-"""ATCT Narrative Fingerprint v0.3 hierarchical intervention evidence."""
+"""ATCT Narrative Fingerprint v0.4 hierarchical intervention evidence."""
 
 from __future__ import annotations
 
@@ -33,6 +33,16 @@ from .motifs import MotifAnalysis, analyze_motifs
 from .null_models import (
     CONTROL_NAMES,
     generate_permutations,
+)
+from .rhetoric import (
+    ClaimScopeAudit,
+    ConceptBranch,
+    MotifRoleAnalysis,
+    QuestionAnswerClosure,
+    analyze_motif_roles,
+    analyze_qa_closure,
+    audit_claim_scope,
+    detect_concept_branches,
 )
 from .segmentation import (
     SectionGraph,
@@ -103,6 +113,10 @@ class FingerprintResult:
     theme_cohesion: float
     segment_diversity: float
     motif_analysis: MotifAnalysis
+    motif_role_analysis: MotifRoleAnalysis
+    concept_branches: tuple[ConceptBranch, ...]
+    qa_closure: QuestionAnswerClosure
+    claim_scope_audit: ClaimScopeAudit
     structure_type: str
     document_structure: Mapping[str, object]
     section_graph: SectionGraph
@@ -172,11 +186,28 @@ def _structure_type(
     long_gain: float,
     segment_distance: float,
     motifs: MotifAnalysis,
+    motif_roles: MotifRoleAnalysis,
+    qa_closure: QuestionAnswerClosure,
     graph: SectionGraph,
+    sentence_count: int,
     last_sentence: str,
 ) -> str:
     if motifs.exact_duplicate_rate >= 0.15:
         return "repetitive"
+    opening_limit = max(1, int(sentence_count * 0.20))
+    ending_limit = max(0, int(sentence_count * 0.80))
+    has_edge_role_return = any(
+        item.kind == "return_with_role_shift"
+        and item.first_index <= opening_limit
+        and item.second_index >= ending_limit
+        for item in motif_roles.transitions
+    )
+    if (
+        qa_closure.closed
+        and has_edge_role_return
+        and graph.conclusion_convergence >= 0.35
+    ):
+        return "open_spiral"
     if (
         motifs.transformed_closure >= 0.35
         and motifs.motif_recurrence > 0
@@ -332,6 +363,10 @@ def compute_fingerprint(
     _, _, turning_point_z = _z_score(original_turn_mean, null_turn_means)
 
     motifs = analyze_motifs(matrix, sentences)
+    motif_roles = analyze_motif_roles(sentences, matrix)
+    concept_branches = detect_concept_branches(sentences)
+    qa_closure = analyze_qa_closure(sentences, matrix)
+    claim_scope = audit_claim_scope(sentences, matrix)
     changes = history_change(states)
     effective_sections = tuple(
         sections
@@ -351,6 +386,29 @@ def compute_fingerprint(
     for section in effective_sections:
         for sentence_index in section.sentence_indices:
             sentence_sections[sentence_index] = section.heading
+    motif_roles_by_sentence: dict[int, set[str]] = {}
+    for transition in motif_roles.transitions:
+        motif_roles_by_sentence.setdefault(transition.first_index, set()).add(
+            transition.motif
+        )
+        motif_roles_by_sentence.setdefault(transition.second_index, set()).add(
+            transition.motif
+        )
+    branch_indices = {
+        branch.sentence_index for branch in concept_branches
+    } | {
+        branch.paired_sentence_index
+        for branch in concept_branches
+        if branch.paired_sentence_index is not None
+    }
+    qa_roles: dict[int, str] = {}
+    if qa_closure.closed and qa_closure.pairs:
+        best_qa = qa_closure.pairs[0]
+        qa_roles[best_qa.question_index] = "opening_question"
+        qa_roles[best_qa.answer_index] = "closing_answer"
+    scope_warning_indices = {
+        finding.assertion_index for finding in claim_scope.findings
+    }
     raw_sentence_rows = tuple(
         {
             "index": index,
@@ -370,6 +428,12 @@ def compute_fingerprint(
                 else float(sentence_long_gain[index])
             ),
             "direction_delta": directional.sentence_deltas[index],
+            "motif_roles": "; ".join(
+                sorted(motif_roles_by_sentence.get(index, set()))
+            ),
+            "concept_branch": index in branch_indices,
+            "qa_role": qa_roles.get(index, ""),
+            "scope_warning": index in scope_warning_indices,
             "role": _sentence_role(
                 index, float(sentence_z[index]), float(turn_sentence_z[index]), motifs
             ),
@@ -409,6 +473,7 @@ def compute_fingerprint(
         duplicate_rate=motifs.exact_duplicate_rate,
         confounds=confounds,
         licensed_indices=licensed_indices,
+        scope_warning_indices=scope_warning_indices,
     )
     structure = _structure_type(
         order_z=order_z,
@@ -416,12 +481,15 @@ def compute_fingerprint(
         long_gain=long_gain,
         segment_distance=segment_distance,
         motifs=motifs,
+        motif_roles=motif_roles,
+        qa_closure=qa_closure,
         graph=graph,
+        sentence_count=len(sentences),
         last_sentence=sentences[-1],
     )
 
     return FingerprintResult(
-        version="0.3.0",
+        version="0.4.0",
         sentence_count=len(sentences),
         primary_metric="Z_order",
         primary_window=primary_window,
@@ -438,6 +506,10 @@ def compute_fingerprint(
         theme_cohesion=theme_value,
         segment_diversity=segment_distance,
         motif_analysis=motifs,
+        motif_role_analysis=motif_roles,
+        concept_branches=concept_branches,
+        qa_closure=qa_closure,
+        claim_scope_audit=claim_scope,
         structure_type=structure,
         document_structure=dict(document_structure or {}),
         section_graph=graph,

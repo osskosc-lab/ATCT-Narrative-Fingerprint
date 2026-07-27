@@ -25,7 +25,7 @@ def _write_summary_pdf(path: Path, result: FingerprintResult) -> None:
     """Write a dependency-free, ASCII summary PDF."""
 
     lines = [
-        "ATCT Narrative Fingerprint v0.3",
+        "ATCT Narrative Fingerprint v0.4",
         f"Primary metric: Z_order = {result.order_z:.4f}",
         f"Gate: {result.gate}",
         f"Sentences: {result.sentence_count}",
@@ -39,6 +39,13 @@ def _write_summary_pdf(path: Path, result: FingerprintResult) -> None:
         f"Theme cohesion: {result.theme_cohesion:.4f}",
         f"Segment diversity: {result.segment_diversity:.4f}",
         f"Structure type: {result.structure_type}",
+        (
+            "Motif role-shift returns: "
+            f"{result.motif_role_analysis.transformed_return_count}"
+        ),
+        f"Concept branches: {len(result.concept_branches)}",
+        f"Q-A closure score: {result.qa_closure.best_score:.4f}",
+        f"Claim-scope warnings: {len(result.claim_scope_audit.findings)}",
         "",
         "Controls:",
     ]
@@ -103,7 +110,7 @@ def write_report_bundle(
     *,
     fingerprint_payload: Mapping[str, object] | None = None,
 ) -> dict[str, str]:
-    """Write the complete v0.3 report bundle and return generated paths."""
+    """Write the complete v0.4 report bundle and return generated paths."""
 
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
@@ -127,6 +134,10 @@ def write_report_bundle(
         "turn_z",
         "long_history_gain",
         "direction_delta",
+        "motif_roles",
+        "concept_branch",
+        "qa_role",
+        "scope_warning",
         "licensed_jump",
         "role",
     ]
@@ -171,6 +182,74 @@ def write_report_bundle(
         writer.writeheader()
         writer.writerows(motif_rows)
 
+    motif_role_path = destination / "motif_role_transitions.csv"
+    motif_role_fields = [
+        "motif",
+        "first_index",
+        "second_index",
+        "first_sentence",
+        "second_sentence",
+        "context_similarity",
+        "role_shift",
+        "relative_distance",
+        "kind",
+    ]
+    with motif_role_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=motif_role_fields)
+        writer.writeheader()
+        writer.writerows(
+            item.to_dict() for item in result.motif_role_analysis.transitions
+        )
+
+    branch_path = destination / "concept_branches.csv"
+    branch_fields = [
+        "sentence_index",
+        "paired_sentence_index",
+        "marker",
+        "left_branch",
+        "right_branch",
+        "lexical_similarity",
+        "lexical_divergence",
+    ]
+    with branch_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=branch_fields)
+        writer.writeheader()
+        writer.writerows(item.to_dict() for item in result.concept_branches)
+
+    qa_path = destination / "qa_closure.csv"
+    qa_fields = [
+        "question_index",
+        "answer_index",
+        "question",
+        "answer",
+        "semantic_similarity",
+        "lexical_overlap",
+        "answer_cue",
+        "score",
+        "kind",
+    ]
+    with qa_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=qa_fields)
+        writer.writeheader()
+        writer.writerows(item.to_dict() for item in result.qa_closure.pairs)
+
+    scope_path = destination / "claim_scope_audit.csv"
+    scope_fields = [
+        "qualifier_index",
+        "assertion_index",
+        "qualifier_sentence",
+        "assertion_sentence",
+        "shared_anchors",
+        "semantic_similarity",
+        "warning",
+    ]
+    with scope_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=scope_fields)
+        writer.writeheader()
+        writer.writerows(
+            item.to_dict() for item in result.claim_scope_audit.findings
+        )
+
     section_path = destination / "section_graph.csv"
     section_fields = [
         "source_id",
@@ -212,7 +291,7 @@ def write_report_bundle(
     report_path.write_text(
         "\n".join(
             [
-                "# ATCT Narrative Fingerprint v0.3",
+                "# ATCT Narrative Fingerprint v0.4",
                 "",
                 f"- **Z_order:** {result.order_z:.4f}",
                 f"- **判定:** {result.gate}",
@@ -230,6 +309,20 @@ def write_report_bundle(
                 f"- **転換点Z:** {result.turning_point_z:.4f}",
                 f"- **主題凝集度:** {result.theme_cohesion:.4f}",
                 f"- **構造的多様性:** {result.segment_diversity:.4f}",
+                (
+                    f"- **変形モチーフ帰還候補:** "
+                    f"{result.motif_role_analysis.transformed_return_count}"
+                ),
+                f"- **対立・選択分岐候補:** {len(result.concept_branches)}",
+                (
+                    f"- **Question–Answer Closure:** "
+                    f"{result.qa_closure.best_score:.4f} "
+                    f"({'matched' if result.qa_closure.closed else 'unmatched'})"
+                ),
+                (
+                    f"- **留保スコープ警告:** "
+                    f"{len(result.claim_scope_audit.findings)}"
+                ),
                 "",
                 "## 順序対照",
                 "",
@@ -264,6 +357,10 @@ def write_report_bundle(
         "sentence_map": str(sentence_path),
         "turning_points": str(turning_path),
         "motif_pairs": str(motif_path),
+        "motif_role_transitions": str(motif_role_path),
+        "concept_branches": str(branch_path),
+        "qa_closure": str(qa_path),
+        "claim_scope_audit": str(scope_path),
         "section_graph": str(section_path),
         "document_blocks": str(block_path),
         "markdown": str(report_path),

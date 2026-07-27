@@ -20,11 +20,13 @@ class ReportingTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory(dir=".") as directory:
             paths = write_report_bundle(result, directory)
-            self.assertEqual(len(paths), 8)
+            self.assertEqual(len(paths), 12)
             for value in paths.values():
                 self.assertGreater(Path(value).stat().st_size, 0)
             payload = json.loads(Path(paths["fingerprint"]).read_text("utf-8"))
-            self.assertEqual(payload["version"], "0.3.0")
+            self.assertEqual(payload["version"], "0.4.0")
+            self.assertIn("motif_role_analysis", payload)
+            self.assertIn("qa_closure", payload)
             self.assertTrue(Path(paths["pdf"]).read_bytes().startswith(b"%PDF"))
 
 

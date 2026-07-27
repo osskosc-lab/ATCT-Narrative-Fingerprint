@@ -31,6 +31,10 @@ jobs:
             --output reports/smoke
           test -s reports/smoke/fingerprint.json
           test -s reports/smoke/sentence_map.csv
+          test -s reports/smoke/motif_role_transitions.csv
+          test -s reports/smoke/concept_branches.csv
+          test -s reports/smoke/qa_closure.csv
+          test -s reports/smoke/claim_scope_audit.csv
           test -s reports/smoke/section_graph.csv
           test -s reports/smoke/document_blocks.csv
           test -s reports/smoke/report.pdf
