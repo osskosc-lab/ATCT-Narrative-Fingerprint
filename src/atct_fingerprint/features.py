@@ -20,7 +20,7 @@ def split_sentences(text: str) -> list[str]:
     if not cleaned:
         return []
     parts = re.split(
-        r"(?<=[。！？])[\t ]*|(?<=[.!?])[\t ]+|\n+",
+        r"(?<=[。！？!?])[\t ]*|(?<=\.)[\t ]+|\n+",
         cleaned,
     )
     return [part.strip() for part in parts if part.strip()]
