@@ -1,0 +1,5 @@
+text,label,split,source,genre
+"人間文章。二文目。三文目。四文目。",0,train,human-corpus-a,essay
+"既知モデル文。二文目。三文目。四文目。",1,train,known-model-a,essay
+"別の人間文章。二文目。三文目。四文目。",0,test,human-corpus-b,essay
+"未知モデル文。二文目。三文目。四文目。",1,test,unseen-model-x,essay

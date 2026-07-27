@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atct-narrative-fingerprint"
+version = "0.1.0"
+description = "A falsifiable checker for order-dependent narrative structure"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "osskosc-lab" }]
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "scikit-learn>=1.4",
+]
+
+[project.optional-dependencies]
+semantic = ["sentence-transformers>=3.0"]
+
+[project.scripts]
+atct-fingerprint = "atct_fingerprint.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 88
