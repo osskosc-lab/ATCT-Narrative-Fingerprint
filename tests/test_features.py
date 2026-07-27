@@ -25,6 +25,10 @@ class FeatureTests(unittest.TestCase):
             ["Version 3.14 is stable.", "Next sentence!", "Final sentence?"],
         )
 
+    def test_ascii_question_mark_can_split_without_space(self):
+        text = "本当に?次へ進む!"
+        self.assertEqual(split_sentences(text), ["本当に?", "次へ進む!"])
+
     def test_constant_trajectory_has_no_order_signal(self):
         sentences = [f"sentence {index}" for index in range(6)]
         vectors = np.ones((6, 4))
