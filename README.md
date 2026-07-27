@@ -28,6 +28,12 @@ The analyzer uses causal windows \(w \in \{3,5,8,13\}\). Raw values are the
 research features. The 0–100 values are bounded display transforms, **not
 calibrated probabilities**.
 
+For shuffle and reverse interventions, the perturbed trajectory is re-aligned
+by sentence identity before distance is calculated. Each sentence is therefore
+compared with itself under a changed preceding history. This prevents the order
+metric from merely counting that different sentence content moved into the same
+absolute position.
+
 ## Install
 
 ```bash
@@ -78,11 +84,13 @@ The evaluator reports:
 - sentence-shuffled control AUROC;
 - incremental improvement and mechanism drop;
 - `supported`, `unsupported`, or `mechanism_falsified`;
-- source-leakage, genre, and length audits.
+- source-leakage, duplicate-document, genre, and length audits.
 
-It rejects a test split whose AI model identifier also occurs in training.
-See [`docs/RESEARCH_PROTOCOL.md`](docs/RESEARCH_PROTOCOL.md) before collecting
-or interpreting data.
+It rejects a test split whose AI model identifier also occurs in training. It
+also rejects normalized duplicate documents shared by train and test, empty
+metadata, and documents with fewer than four sentences. See
+[`docs/RESEARCH_PROTOCOL.md`](docs/RESEARCH_PROTOCOL.md) before collecting or
+interpreting data.
 
 ## Current scope
 
