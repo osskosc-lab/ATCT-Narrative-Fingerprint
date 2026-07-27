@@ -17,6 +17,17 @@ baseline, and one falsification experiment.
 | Support threshold | combined AUROC − baseline AUROC ≥ 0.05 |
 | Mechanism failure | combined AUROC − shuffled-control AUROC ≤ 0.01 |
 
+## Perturbation alignment
+
+Order and reverse sensitivity compare the causal state attached to the same
+sentence identity before and after intervention. Perturbed trajectories are
+mapped back from their shuffled positions to their original sentence IDs before
+distance is computed.
+
+This alignment is mandatory. A position-wise comparison would confound changed
+history with the trivial fact that a different sentence moved into a given
+position, and would therefore overstate the causal order signal.
+
 ## Required CSV
 
 The evaluator accepts UTF-8 CSV with these columns:
@@ -29,9 +40,10 @@ The evaluator accepts UTF-8 CSV with these columns:
 | `source` | human corpus or AI model identifier |
 | `genre` | controlled genre identifier |
 
-AI `source` values must be disjoint between train and test. The evaluator
-raises an error instead of silently accepting source leakage. Both splits must
-contain both labels.
+AI `source` values must be disjoint between train and test. Normalized duplicate
+documents are also forbidden across splits. The evaluator raises an error
+instead of silently accepting either form of leakage. Both splits must contain
+both labels, and text, source, and genre fields must be non-empty.
 
 ## Controls that remain the researcher's responsibility
 
