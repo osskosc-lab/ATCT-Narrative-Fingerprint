@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
 import re
 from typing import Iterable, Sequence
@@ -71,11 +72,31 @@ def load_dataset(path: str | Path) -> list[DatasetRow]:
     return rows
 
 
+def _normalized_text_hash(text: str) -> str:
+    normalized = re.sub(r"\s+", "", text).casefold()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def validate_protocol(rows: Sequence[DatasetRow]) -> dict[str, object]:
-    """Reject class-invalid splits and unseen-AI source leakage."""
+    """Reject invalid splits, source leakage, and exact document leakage."""
 
     if not rows:
         raise ValueError("dataset is empty")
+
+    for index, row in enumerate(rows, start=1):
+        if not row.text.strip():
+            raise ValueError(f"row {index}: text must not be empty")
+        if len(split_sentences(row.text)) < 4:
+            raise ValueError(f"row {index}: text must contain at least four sentences")
+        if not row.source.strip():
+            raise ValueError(f"row {index}: source must not be empty")
+        if not row.genre.strip():
+            raise ValueError(f"row {index}: genre must not be empty")
+        if row.label not in {0, 1}:
+            raise ValueError(f"row {index}: label must be 0 or 1")
+        if row.split not in {"train", "test"}:
+            raise ValueError(f"row {index}: split must be train or test")
+
     train = [row for row in rows if row.split == "train"]
     test = [row for row in rows if row.split == "test"]
     if not train or not test:
@@ -94,6 +115,15 @@ def validate_protocol(rows: Sequence[DatasetRow]) -> dict[str, object]:
             + ", ".join(sorted(leakage))
         )
 
+    train_hashes = {_normalized_text_hash(row.text) for row in train}
+    test_hashes = {_normalized_text_hash(row.text) for row in test}
+    duplicate_documents = train_hashes.intersection(test_hashes)
+    if duplicate_documents:
+        raise ValueError(
+            "document leakage between train and test: "
+            f"{len(duplicate_documents)} normalized duplicate(s)"
+        )
+
     train_genres = {row.genre for row in train}
     test_genres = {row.genre for row in test}
     unmatched_test_genres = sorted(test_genres.difference(train_genres))
@@ -103,6 +133,7 @@ def validate_protocol(rows: Sequence[DatasetRow]) -> dict[str, object]:
         "train_ai_sources": sorted(train_ai_sources),
         "test_ai_sources": sorted(test_ai_sources),
         "unmatched_test_genres": unmatched_test_genres,
+        "normalized_duplicate_documents": 0,
     }
 
 
@@ -113,7 +144,10 @@ def _feature_row(text: str, encoder: SentenceEncoder, seed: int) -> list[float]:
 
 def _shuffle_text(text: str, rng: np.random.Generator) -> str:
     sentences = split_sentences(text)
+    identity = np.arange(len(sentences))
     permutation = rng.permutation(len(sentences))
+    if np.array_equal(permutation, identity):
+        permutation = np.roll(permutation, 1)
     return "\n".join(sentences[index] for index in permutation)
 
 
