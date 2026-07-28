@@ -60,6 +60,16 @@ _TERMINAL_PATTERN = re.compile(
 )
 
 
+def _continues_after_closing_quote(line: str, end: int, terminal: str) -> bool:
+    """Return whether a quote-closing terminal is followed by the same sentence."""
+
+    if not terminal or terminal[-1] not in _CLOSING_PUNCTUATION:
+        return False
+    if end >= len(line) or line[end].isspace():
+        return False
+    return line[end] not in "「『【（《〈〔〖〘〚“‘\"'"
+
+
 def split_sentences(text: str) -> list[str]:
     """Split Japanese or Latin prose while retaining punctuation and quotes."""
 
@@ -74,6 +84,8 @@ def split_sentences(text: str) -> list[str]:
         start = 0
         for match in _TERMINAL_PATTERN.finditer(line):
             end = match.end()
+            if _continues_after_closing_quote(line, end, match.group(0)):
+                continue
             sentence = line[start:end].strip()
             if sentence:
                 sentences.append(sentence)

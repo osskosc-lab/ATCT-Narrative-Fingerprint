@@ -25,6 +25,16 @@ class FeatureV02Tests(unittest.TestCase):
             ["値は3.14です。", "「進む！」", "Version 3.14 is stable.", "Next?"],
         )
 
+    def test_inline_quoted_question_does_not_split_the_host_sentence(self):
+        text = "このノートは、「価値とは何か。」という問いから始まった。"
+        self.assertEqual(split_sentences(text), [text])
+
+    def test_adjacent_complete_quotes_remain_separate_sentences(self):
+        self.assertEqual(
+            split_sentences("「行く。」「待って。」"),
+            ["「行く。」", "「待って。」"],
+        )
+
     def test_current_sentence_is_excluded_from_history(self):
         vectors = np.eye(5)
         causal = causal_history_states(vectors, 3)
