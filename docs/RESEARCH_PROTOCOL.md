@@ -1,27 +1,28 @@
-# ATCT Narrative Fingerprint v0.4 research protocol
+# ATCT Narrative Fingerprint v0.5 research protocol
 
 ## Fixed proposition
 
-> Is the original history-conditioned coherence significantly higher than
-> content-preserving order controls?
+> Do lexical history and subject-predicate-target history retain significantly
+> more ordered structure than their content-preserving controls?
 
-This protocol follows one proposition, one primary metric, one baseline, and
-one primary falsification.
+The proposition is evaluated through two non-aggregated evidence channels.
 
 | Item | Fixed choice |
 |---|---|
-| Primary metric | `Z_order` |
+| Primary lexical metric | `Z_lexical` |
+| Primary relational metric | `Z_relational` |
 | Primary history window | 5 preceding sentences |
 | Baseline | v0.1 history state that includes the current sentence |
-| Primary null | complete random sentence order |
-| Support | `Z_order ≥ 2` |
-| Unsupported | `Z_order < 2` |
-| Mechanism falsification | a fully shuffled input retains comparable Z |
-| Implementation falsification | sentence count or short-sentence rate dominates Z |
+| Lexical null | complete random sentence order |
+| Relational null | shuffled relation-frame positions |
+| Descriptive support | either preregistered channel reaches Z ≥2 and loses the signal under its null |
+| Unsupported | both channels remain below Z=2 |
+| Mechanism falsification | the relevant shuffle retains comparable Z |
+| Implementation falsification | surface length, sentence count, or target labels spuriously dominate |
 
 ## History separation
 
-For every prose sentence \(x_t\), v0.4 constructs:
+For every prose sentence \(x_t\), v0.5 retains the v0.4 lexical state:
 
 \[
 h_t^{(w)} =
@@ -37,6 +38,22 @@ C_t^{(w)}=\cos(x_t,h_t^{(w)}).
 
 The sentence being evaluated is excluded. The first sentence has no prior
 history, so its sentence-level consistency and Z are reported as unavailable.
+
+## Relation history
+
+Each detected clause produces
+
+\[
+G_t=(S_t,P_t,O_t,R_t,M_t),
+\]
+
+with subject, predicate family, target, discourse role, and motif evidence.
+Target asymmetry compares execution intensity under other and self targets.
+Relation-order evidence compares the temporal coupling between target changes
+and intensity changes against shuffled frame positions.
+
+The CI extractor is a deterministic Japanese construction baseline. Production
+claims require a frozen semantic-role model and manually annotated corpus.
 
 ## Null models
 
@@ -97,7 +114,8 @@ the channels are not averaged into one score.
 
 The report preserves:
 
-- aggregate control distributions and `Z_order`;
+- aggregate control distributions and `Z_lexical`;
+- relation frames, target asymmetry, relation flips, and `Z_relational`;
 - every sentence's evidence and structural role;
 - ranked turning points;
 - transformed motif and duplicate pair tables;
@@ -120,8 +138,9 @@ No 0–100 writing-quality score is emitted.
 
 ## Stop conditions
 
-- **Support:** `Z_order ≥ 2` and the fully shuffled input loses the signal.
-- **Unsupported:** `Z_order < 2`.
-- **Mechanism falsified:** fully shuffled input retains comparable evidence.
+- **Support:** a preregistered channel reaches Z ≥2 and loses the signal under
+  its corresponding order intervention.
+- **Unsupported:** both `Z_lexical` and `Z_relational` remain below 2.
+- **Mechanism falsified:** the corresponding shuffle retains comparable evidence.
 - **Implementation falsified:** split/merge, short-sentence rate, or document
   length dominates the result.

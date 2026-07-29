@@ -8,6 +8,7 @@ import re
 
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
+_NUMBERED_HEADING = re.compile(r"^\s*\d+[.．]\s+(.+?)\s*$")
 _LIST_ITEM = re.compile(r"^\s*(?:[-+*]|\d+[.)])\s+")
 _THEMATIC_BREAK = re.compile(r"^\s*(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$")
 _TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$")
@@ -195,6 +196,19 @@ def parse_markdown_document(
             )
             continue
 
+        numbered_heading = _NUMBERED_HEADING.match(stripped)
+        if numbered_heading and not numbered_heading.group(1).endswith(
+            ("。", "！", "？", ".", "!", "?")
+        ):
+            flush_paragraph(line_number - 1)
+            add_structural_block(
+                "numbered_heading",
+                numbered_heading.group(1),
+                line_number,
+                level=1,
+            )
+            continue
+
         fence = None
         if stripped.startswith("```") or stripped.startswith("~~~"):
             fence = ("code", stripped[:3])
@@ -284,6 +298,9 @@ def parse_markdown_document(
             block.kind not in {"prose", "equation"} for block in blocks
         ),
         "heading": sum(block.kind == "heading" for block in blocks),
+        "numbered_heading": sum(
+            block.kind == "numbered_heading" for block in blocks
+        ),
         "quote": sum(block.kind == "quote" for block in blocks),
         "list_item": sum(block.kind == "list_item" for block in blocks),
     }

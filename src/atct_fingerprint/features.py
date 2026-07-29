@@ -1,4 +1,4 @@
-"""ATCT Narrative Fingerprint v0.4 hierarchical intervention evidence."""
+"""ATCT Narrative Fingerprint v0.5 lexical and relational history evidence."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from typing import Mapping, Sequence
 
 import numpy as np
 
+from .closure_states import ClosureAnalysis, analyze_closure
 from .diagnostics import (
     confound_audit,
     editing_risks,
@@ -15,6 +16,7 @@ from .diagnostics import (
     theme_cohesion,
 )
 from .directionality import DirectionalityResult, conditional_directionality
+from .discourse_units import DiscourseUnit, build_discourse_units
 from .document import ParsedDocument, SectionSpan, parse_markdown_document
 from .encoders import SentenceEncoder, TfidfSentenceEncoder
 from .history import (
@@ -30,6 +32,7 @@ from .history import (
     rolling_predictive_gain,
 )
 from .motifs import MotifAnalysis, analyze_motifs
+from .motif_functions import MotifFunctionAnalysis, analyze_motif_functions
 from .null_models import (
     CONTROL_NAMES,
     generate_permutations,
@@ -44,6 +47,7 @@ from .rhetoric import (
     audit_claim_scope,
     detect_concept_branches,
 )
+from .relations import RelationalAnalysis, analyze_relations
 from .segmentation import (
     SectionGraph,
     analysis_segments,
@@ -70,6 +74,13 @@ def _continues_after_closing_quote(line: str, end: int, terminal: str) -> bool:
     return line[end] not in "「『【（《〈〔〖〘〚“‘\"'"
 
 
+def _is_numbered_prefix(line: str, start: int, end: int, terminal: str) -> bool:
+    if terminal != "." or end >= len(line):
+        return False
+    prefix = line[start:end].strip()
+    return bool(re.fullmatch(r"\d+\.", prefix)) and line[end].isspace()
+
+
 def split_sentences(text: str) -> list[str]:
     """Split Japanese or Latin prose while retaining punctuation and quotes."""
 
@@ -84,6 +95,8 @@ def split_sentences(text: str) -> list[str]:
         start = 0
         for match in _TERMINAL_PATTERN.finditer(line):
             end = match.end()
+            if _is_numbered_prefix(line, start, end, match.group(0)):
+                continue
             if _continues_after_closing_quote(line, end, match.group(0)):
                 continue
             sentence = line[start:end].strip()
@@ -113,6 +126,8 @@ class FingerprintResult:
     primary_metric: str
     primary_window: int
     order_z: float
+    lexical_order_z: float
+    relational_order_z: float
     gate: str
     original_consistency: float
     controls: Mapping[str, ControlSummary]
@@ -129,7 +144,11 @@ class FingerprintResult:
     concept_branches: tuple[ConceptBranch, ...]
     qa_closure: QuestionAnswerClosure
     claim_scope_audit: ClaimScopeAudit
-    structure_type: str
+    relational_analysis: RelationalAnalysis
+    motif_function_analysis: MotifFunctionAnalysis
+    closure_analysis: ClosureAnalysis
+    discourse_units: tuple[DiscourseUnit, ...]
+    structure_type: tuple[str, ...]
     document_structure: Mapping[str, object]
     section_graph: SectionGraph
     sentence_map: tuple[Mapping[str, object], ...]
@@ -243,6 +262,32 @@ def _structure_type(
     if order_z >= 2.0 and reverse_directionality > 0:
         return "linear"
     return "weak_or_mixed"
+
+
+def _combined_structure_types(
+    base_type: str,
+    relations: RelationalAnalysis,
+    motif_functions: MotifFunctionAnalysis,
+    closure: ClosureAnalysis,
+) -> tuple[str, ...]:
+    kinds: list[str] = []
+    if relations.relation_flips and any(
+        abs(item.asymmetry) >= 0.25 for item in relations.target_asymmetries
+    ):
+        kinds.append("relational_mirror")
+    if motif_functions.role_transforming_cycle:
+        kinds.append("role_transforming_cycle")
+    if (
+        closure.primary_state == "deferred_closure"
+        and any(
+            item.self_target_mean < item.other_target_mean
+            for item in relations.target_asymmetries
+        )
+    ):
+        kinds.append("deferred_self_judgment")
+    if base_type != "weak_or_mixed" or not kinds:
+        kinds.append(base_type)
+    return tuple(dict.fromkeys(kinds))
 
 
 def compute_fingerprint(
@@ -376,9 +421,17 @@ def compute_fingerprint(
 
     motifs = analyze_motifs(matrix, sentences)
     motif_roles = analyze_motif_roles(sentences, matrix)
+    motif_functions = analyze_motif_functions(sentences)
     concept_branches = detect_concept_branches(sentences)
     qa_closure = analyze_qa_closure(sentences, matrix)
     claim_scope = audit_claim_scope(sentences, matrix)
+    relations = analyze_relations(
+        sentences,
+        lexical_z=order_z,
+        shuffle_count=shuffle_count,
+        seed=seed,
+    )
+    closure = analyze_closure(sentences)
     changes = history_change(states)
     effective_sections = tuple(
         sections
@@ -421,6 +474,28 @@ def compute_fingerprint(
     scope_warning_indices = {
         finding.assertion_index for finding in claim_scope.findings
     }
+    relation_frames_by_sentence: dict[int, list[object]] = {}
+    for frame in relations.frames:
+        relation_frames_by_sentence.setdefault(frame.sentence_index, []).append(frame)
+    relation_flip_indices = {
+        index
+        for flip in relations.relation_flips
+        for index in (flip.first_sentence_index, flip.second_sentence_index)
+    }
+    motif_functions_by_sentence: dict[int, list[str]] = {}
+    for occurrence in motif_functions.occurrences:
+        motif_functions_by_sentence.setdefault(
+            occurrence.sentence_index, []
+        ).append(
+            f"{occurrence.motif}:{occurrence.function}:{occurrence.role}"
+        )
+    closure_roles: dict[int, list[str]] = {}
+    for index in closure.recognition_indices:
+        closure_roles.setdefault(index, []).append("recognition")
+    for index in closure.execution_indices:
+        closure_roles.setdefault(index, []).append("execution")
+    for index in closure.deferment_indices:
+        closure_roles.setdefault(index, []).append("deferred")
     raw_sentence_rows = tuple(
         {
             "index": index,
@@ -446,6 +521,35 @@ def compute_fingerprint(
             "concept_branch": index in branch_indices,
             "qa_role": qa_roles.get(index, ""),
             "scope_warning": index in scope_warning_indices,
+            "subjects": "; ".join(
+                dict.fromkeys(
+                    frame.subject
+                    for frame in relation_frames_by_sentence.get(index, [])
+                )
+            ),
+            "predicate_families": "; ".join(
+                dict.fromkeys(
+                    frame.predicate_family
+                    for frame in relation_frames_by_sentence.get(index, [])
+                )
+            ),
+            "targets": "; ".join(
+                dict.fromkeys(
+                    frame.target
+                    for frame in relation_frames_by_sentence.get(index, [])
+                )
+            ),
+            "modalities": "; ".join(
+                dict.fromkeys(
+                    frame.modality
+                    for frame in relation_frames_by_sentence.get(index, [])
+                )
+            ),
+            "relation_flip": index in relation_flip_indices,
+            "motif_functions": "; ".join(
+                motif_functions_by_sentence.get(index, [])
+            ),
+            "closure_role": "; ".join(closure_roles.get(index, [])),
             "role": _sentence_role(
                 index, float(sentence_z[index]), float(turn_sentence_z[index]), motifs
             ),
@@ -487,7 +591,7 @@ def compute_fingerprint(
         licensed_indices=licensed_indices,
         scope_warning_indices=scope_warning_indices,
     )
-    structure = _structure_type(
+    lexical_structure = _structure_type(
         order_z=order_z,
         reverse_directionality=reverse_directionality,
         long_gain=long_gain,
@@ -499,14 +603,31 @@ def compute_fingerprint(
         sentence_count=len(sentences),
         last_sentence=sentences[-1],
     )
+    structure = _combined_structure_types(
+        lexical_structure,
+        relations,
+        motif_functions,
+        closure,
+    )
+    discourse_units = build_discourse_units(
+        sentences,
+        paragraphs,
+        document_structure,
+    )
 
     return FingerprintResult(
-        version="0.4.0",
+        version="0.5.0",
         sentence_count=len(sentences),
-        primary_metric="Z_order",
+        primary_metric="Z_lexical + Z_relational",
         primary_window=primary_window,
         order_z=order_z,
-        gate="supported" if order_z >= 2.0 else "unsupported",
+        lexical_order_z=order_z,
+        relational_order_z=relations.relational_order_z,
+        gate=(
+            "supported"
+            if order_z >= 2.0 or relations.relational_order_z >= 2.0
+            else "unsupported"
+        ),
         original_consistency=original_consistency,
         controls=control_summaries,
         reverse_directionality=reverse_directionality,
@@ -522,6 +643,10 @@ def compute_fingerprint(
         concept_branches=concept_branches,
         qa_closure=qa_closure,
         claim_scope_audit=claim_scope,
+        relational_analysis=relations,
+        motif_function_analysis=motif_functions,
+        closure_analysis=closure,
+        discourse_units=discourse_units,
         structure_type=structure,
         document_structure=dict(document_structure or {}),
         section_graph=graph,
@@ -532,8 +657,9 @@ def compute_fingerprint(
         seed=seed,
         shuffle_count=shuffle_count,
         disclaimer=(
-            "Z_order is statistical evidence for order-conditioned coherence. "
-            "It is not an authorship probability or a writing-quality score."
+            "Z_lexical and Z_relational are statistical evidence for lexical "
+            "and relation-conditioned structure. They are not authorship "
+            "probabilities or writing-quality scores."
         ),
     )
 

@@ -35,6 +35,10 @@ class FeatureV02Tests(unittest.TestCase):
             ["「行く。」", "「待って。」"],
         )
 
+    def test_numbered_heading_is_not_split_after_its_number(self):
+        text = "1. 魂の奥底を揺さぶる合図"
+        self.assertEqual(split_sentences(text), [text])
+
     def test_current_sentence_is_excluded_from_history(self):
         vectors = np.eye(5)
         causal = causal_history_states(vectors, 3)

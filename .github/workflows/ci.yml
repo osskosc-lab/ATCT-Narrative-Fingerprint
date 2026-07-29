@@ -35,6 +35,12 @@ jobs:
           test -s reports/smoke/concept_branches.csv
           test -s reports/smoke/qa_closure.csv
           test -s reports/smoke/claim_scope_audit.csv
+          test -s reports/smoke/relations.csv
+          test -s reports/smoke/target_asymmetry.csv
+          test -s reports/smoke/relation_flips.csv
+          test -s reports/smoke/motif_functions.csv
+          test -s reports/smoke/closure_states.csv
+          test -s reports/smoke/discourse_units.csv
           test -s reports/smoke/section_graph.csv
           test -s reports/smoke/document_blocks.csv
           test -s reports/smoke/report.pdf

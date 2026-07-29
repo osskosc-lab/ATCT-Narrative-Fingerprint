@@ -1,4 +1,4 @@
-# ATCT Narrative Fingerprint v0.4
+# ATCT Narrative Fingerprint v0.5
 
 **文章がどのような履歴依存構造で生成されたかを測るチェッカー**
 
@@ -7,7 +7,7 @@ The fixed research question remains:
 > Is the original history-conditioned coherence significantly higher than
 > content-preserving order controls?
 
-The primary metric is:
+The lexical primary metric remains:
 
 \[
 Z_{\mathrm{order}} =
@@ -29,7 +29,21 @@ h_t^{(w)} =
 C_t^{(w)}=\cos(x_t,h_t^{(w)}).
 \]
 
-The current sentence is never included in its own history state.
+The current sentence is never included in its own history state. v0.5 adds a
+second, independent relation-history metric:
+
+\[
+Z_{\mathrm{relational}}
+=
+\frac{
+R_{\mathrm{original}}-\mu(R_{\mathrm{frame\ shuffle}})
+}{
+\sigma(R_{\mathrm{frame\ shuffle}})+\varepsilon
+}.
+\]
+
+`Z_lexical` asks whether sentence meaning depends on order. `Z_relational`
+asks whether subject-predicate-target transformations depend on order.
 
 ## Interpretation boundary
 
@@ -45,6 +59,26 @@ structure. The former fixed 0–100 aggregate display score has been removed.
 | `≥ 3` | very strong order dependence |
 
 The threshold is a research convention, not a universal calibration.
+
+## v0.5 changes
+
+Each detected clause is represented as a transparent relation frame containing
+subject, predicate, predicate family, target, polarity, tense, modality,
+execution intensity, and motif evidence. The relation channel reports:
+
+- self/other target asymmetry within each predicate family;
+- ordered relation flips such as other-directed execution followed by
+  self-directed avoidance;
+- `Z_relational` against shuffled relation-frame positions;
+- a lexical/relational four-quadrant diagnosis;
+- same-object role changes and different-object/same-function motif clusters;
+- recognition, execution, deferment, openness, and recognition-action distance;
+- `relational_mirror`, `role_transforming_cycle`, and
+  `deferred_self_judgment` structure labels.
+
+The current extractor is a deterministic Japanese CI baseline, not a complete
+semantic-role or coreference model. Every frame retains its source clause for
+inspection. See [`docs/V05_IMPLEMENTATION_NOTES.md`](docs/V05_IMPLEMENTATION_NOTES.md).
 
 ## v0.4 changes
 
@@ -184,6 +218,12 @@ reports/article/
 ├── concept_branches.csv
 ├── qa_closure.csv
 ├── claim_scope_audit.csv
+├── relations.csv
+├── target_asymmetry.csv
+├── relation_flips.csv
+├── motif_functions.csv
+├── closure_states.csv
+├── discourse_units.csv
 ├── section_graph.csv
 ├── document_blocks.csv
 ├── report.md
@@ -207,13 +247,14 @@ and test. This benchmark does not replace the v0.4 primary document-level
 
 ## Validation status
 
-The implementation includes 36 deterministic tests. They cover
+The implementation includes 49 deterministic tests. They cover
 current-sentence exclusion, Markdown layer separation, hierarchical order
 controls, reversal of the asymmetric direction score, rolling prediction
 without future-target leakage, 30-seed sign stability, shuffled-chain
 falsification, motif deletion, exact-copy rejection, Licensed Jump handling,
 motif role shifts, contrastive branches, question–answer closure, claim-scope
-drift, and report generation.
+drift, target-label reversal, relation destruction, predicate paraphrase,
+functional-motif replacement, closure completion, and report generation.
 
 The PR remains a research preview until real Japanese E5 corpora pass the full
 acceptance matrix, especially literal sentence split/merge tolerance within

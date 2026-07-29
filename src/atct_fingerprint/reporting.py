@@ -25,8 +25,10 @@ def _write_summary_pdf(path: Path, result: FingerprintResult) -> None:
     """Write a dependency-free, ASCII summary PDF."""
 
     lines = [
-        "ATCT Narrative Fingerprint v0.4",
-        f"Primary metric: Z_order = {result.order_z:.4f}",
+        "ATCT Narrative Fingerprint v0.5",
+        f"Lexical order: Z_lexical = {result.lexical_order_z:.4f}",
+        f"Relational order: Z_relational = {result.relational_order_z:.4f}",
+        f"Quadrant: {result.relational_analysis.quadrant}",
         f"Gate: {result.gate}",
         f"Sentences: {result.sentence_count}",
         f"Primary history window: {result.primary_window}",
@@ -38,7 +40,11 @@ def _write_summary_pdf(path: Path, result: FingerprintResult) -> None:
         f"Turning-point Z: {result.turning_point_z:.4f}",
         f"Theme cohesion: {result.theme_cohesion:.4f}",
         f"Segment diversity: {result.segment_diversity:.4f}",
-        f"Structure type: {result.structure_type}",
+        f"Structure type: {', '.join(result.structure_type)}",
+        f"Target asymmetries: {len(result.relational_analysis.target_asymmetries)}",
+        f"Relation flips: {len(result.relational_analysis.relation_flips)}",
+        f"Closure state: {result.closure_analysis.primary_state}",
+        f"Recognition-action distance: {result.closure_analysis.action_distance:.4f}",
         (
             "Motif role-shift returns: "
             f"{result.motif_role_analysis.transformed_return_count}"
@@ -110,7 +116,7 @@ def write_report_bundle(
     *,
     fingerprint_payload: Mapping[str, object] | None = None,
 ) -> dict[str, str]:
-    """Write the complete v0.4 report bundle and return generated paths."""
+    """Write the complete v0.5 report bundle and return generated paths."""
 
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
@@ -138,6 +144,13 @@ def write_report_bundle(
         "concept_branch",
         "qa_role",
         "scope_warning",
+        "subjects",
+        "predicate_families",
+        "targets",
+        "modalities",
+        "relation_flip",
+        "motif_functions",
+        "closure_role",
         "licensed_jump",
         "role",
     ]
@@ -250,6 +263,117 @@ def write_report_bundle(
             item.to_dict() for item in result.claim_scope_audit.findings
         )
 
+    relation_path = destination / "relations.csv"
+    relation_fields = [
+        "frame_index",
+        "sentence_index",
+        "clause_index",
+        "sentence",
+        "clause",
+        "subject",
+        "predicate",
+        "predicate_family",
+        "target",
+        "polarity",
+        "tense",
+        "modality",
+        "intensity",
+        "motifs",
+    ]
+    with relation_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=relation_fields)
+        writer.writeheader()
+        writer.writerows(
+            item.to_dict() for item in result.relational_analysis.frames
+        )
+
+    asymmetry_path = destination / "target_asymmetry.csv"
+    asymmetry_fields = [
+        "predicate_family",
+        "other_target_mean",
+        "self_target_mean",
+        "asymmetry",
+        "other_frame_indices",
+        "self_frame_indices",
+    ]
+    with asymmetry_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=asymmetry_fields)
+        writer.writeheader()
+        writer.writerows(
+            item.to_dict()
+            for item in result.relational_analysis.target_asymmetries
+        )
+
+    flip_path = destination / "relation_flips.csv"
+    flip_fields = [
+        "predicate_family",
+        "subject",
+        "first_frame_index",
+        "second_frame_index",
+        "first_sentence_index",
+        "second_sentence_index",
+        "first_target",
+        "second_target",
+        "intensity_contrast",
+        "temporal_distance",
+        "score",
+    ]
+    with flip_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=flip_fields)
+        writer.writeheader()
+        writer.writerows(
+            item.to_dict() for item in result.relational_analysis.relation_flips
+        )
+
+    motif_function_path = destination / "motif_functions.csv"
+    motif_function_fields = [
+        "sentence_index",
+        "motif",
+        "function",
+        "role",
+        "sentence",
+    ]
+    with motif_function_path.open(
+        "w", encoding="utf-8-sig", newline=""
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=motif_function_fields)
+        writer.writeheader()
+        writer.writerows(
+            item.to_dict()
+            for item in result.motif_function_analysis.occurrences
+        )
+
+    closure_path = destination / "closure_states.csv"
+    closure_fields = [
+        "recognition_score",
+        "execution_score",
+        "deferment_score",
+        "openness_score",
+        "action_distance",
+        "primary_state",
+        "states",
+        "recognition_indices",
+        "execution_indices",
+        "deferment_indices",
+    ]
+    with closure_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=closure_fields)
+        writer.writeheader()
+        writer.writerow(result.closure_analysis.to_dict())
+
+    discourse_path = destination / "discourse_units.csv"
+    discourse_fields = [
+        "unit_index",
+        "kind",
+        "role",
+        "sentence_indices",
+        "text",
+    ]
+    with discourse_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=discourse_fields)
+        writer.writeheader()
+        writer.writerows(item.to_dict() for item in result.discourse_units)
+
     section_path = destination / "section_graph.csv"
     section_fields = [
         "source_id",
@@ -291,11 +415,26 @@ def write_report_bundle(
     report_path.write_text(
         "\n".join(
             [
-                "# ATCT Narrative Fingerprint v0.4",
+                "# ATCT Narrative Fingerprint v0.5",
                 "",
-                f"- **Z_order:** {result.order_z:.4f}",
+                f"- **Z_lexical:** {result.lexical_order_z:.4f}",
+                f"- **Z_relational:** {result.relational_order_z:.4f}",
+                f"- **四象限:** {result.relational_analysis.quadrant}",
                 f"- **判定:** {result.gate}",
-                f"- **構造型:** {result.structure_type}",
+                f"- **構造型:** {', '.join(result.structure_type)}",
+                (
+                    f"- **対象非対称性:** "
+                    f"{len(result.relational_analysis.target_asymmetries)}系列"
+                ),
+                (
+                    f"- **関係反転:** "
+                    f"{len(result.relational_analysis.relation_flips)}候補"
+                ),
+                f"- **結末状態:** {result.closure_analysis.primary_state}",
+                (
+                    f"- **認識―行動距離:** "
+                    f"{result.closure_analysis.action_distance:.4f}"
+                ),
                 (
                     f"- **方向性（{result.directionality.method}）:** "
                     f"{result.reverse_directionality:.4f}"
@@ -361,6 +500,12 @@ def write_report_bundle(
         "concept_branches": str(branch_path),
         "qa_closure": str(qa_path),
         "claim_scope_audit": str(scope_path),
+        "relations": str(relation_path),
+        "target_asymmetry": str(asymmetry_path),
+        "relation_flips": str(flip_path),
+        "motif_functions": str(motif_function_path),
+        "closure_states": str(closure_path),
+        "discourse_units": str(discourse_path),
         "section_graph": str(section_path),
         "document_blocks": str(block_path),
         "markdown": str(report_path),

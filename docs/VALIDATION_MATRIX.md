@@ -1,4 +1,4 @@
-# v0.4 validation matrix
+# v0.5 validation matrix
 
 The code-level tests below validate implementation behavior. They are not a
 substitute for a confirmatory Japanese multilingual-E5 corpus.
@@ -26,10 +26,20 @@ substitute for a confirmatory Japanese multilingual-E5 corpus.
 | conceptual branch | explicit `それとも` alternatives are localized | passed |
 | question–answer closure | opening question is matched to a related ending answer | passed |
 | claim-scope audit | dropped qualifier is flagged; explicit re-scoping is not | passed |
+| target-label reversal | exchanging self/other reverses asymmetry sign | passed |
+| relational order evidence | ordered other-to-self transformation reaches relational Z ≥2 | passed on synthetic baseline |
+| relation destruction | target reassignment lowers relational coherence by at least 30% | passed |
+| predicate paraphrase | mapped surface verbs retain their predicate family | passed |
+| functional motif replacement | note/mirror and recording/video share a functional cluster | passed on registered lexicon |
+| deferred vs resolved closure | completed final action changes the closure state | passed |
+| explanatory-thesis deletion | relation flip remains after deleting the summary sentence | passed |
+| numbered heading | numeric prefix is retained with the heading text | passed |
+| one-sentence paragraph | paragraph unit is retained as emphasis/pause evidence | passed |
 | current-sentence exclusion | new causal state omits \(x_t\) and improves the synthetic gap | passed |
 | evidence localization | sentence map identifies history and turning evidence | passed |
-| report bundle | JSON, nine CSV diagnostics, Markdown, and PDF generated | passed |
+| report bundle | JSON, fifteen CSV diagnostics, Markdown, and PDF generated | passed |
+| Japanese semantic-role model | requires frozen model and annotated corpus | pending |
 | frozen autoregressive direction model | requires model revision and corpus freeze | pending |
 
 Operational status remains **research preview** while literal split/merge
-tolerance and real-corpus E5 stability are pending.
+tolerance, real-corpus E5 stability, and semantic-role validation are pending.

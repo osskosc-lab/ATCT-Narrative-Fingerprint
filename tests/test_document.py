@@ -35,6 +35,21 @@ $$
             ["定義", "仮説", "結論"],
         )
 
+    def test_numbered_heading_and_one_sentence_paragraph_are_preserved(self):
+        text = """1. 魂の奥底を揺さぶる合図
+
+そのノートは、この一年、開かれていない。
+"""
+        parsed = parse_markdown_document(text, split_sentences)
+        heading = next(
+            block for block in parsed.blocks if block.kind == "numbered_heading"
+        )
+        self.assertEqual(heading.text, "魂の奥底を揺さぶる合図")
+        self.assertEqual(
+            parsed.prose_sentences,
+            ("そのノートは、この一年、開かれていない。",),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
