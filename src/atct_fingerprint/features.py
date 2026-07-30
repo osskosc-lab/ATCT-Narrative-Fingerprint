@@ -1,4 +1,4 @@
-"""ATCT Narrative Fingerprint v0.5 lexical and relational history evidence."""
+"""ATCT Narrative Fingerprint v0.6 content and persuasion evidence."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from .diagnostics import (
 )
 from .directionality import DirectionalityResult, conditional_directionality
 from .discourse_units import DiscourseUnit, build_discourse_units
+from .document_layers import analyze_document_layers
 from .document import ParsedDocument, SectionSpan, parse_markdown_document
 from .encoders import SentenceEncoder, TfidfSentenceEncoder
 from .history import (
@@ -48,6 +49,7 @@ from .rhetoric import (
     detect_concept_branches,
 )
 from .relations import RelationalAnalysis, analyze_relations
+from .persuasion import PersuasionAnalysis, analyze_persuasion
 from .segmentation import (
     SectionGraph,
     analysis_segments,
@@ -128,6 +130,8 @@ class FingerprintResult:
     order_z: float
     lexical_order_z: float
     relational_order_z: float
+    content_z: float
+    persuasion_z: float
     gate: str
     original_consistency: float
     controls: Mapping[str, ControlSummary]
@@ -145,6 +149,7 @@ class FingerprintResult:
     qa_closure: QuestionAnswerClosure
     claim_scope_audit: ClaimScopeAudit
     relational_analysis: RelationalAnalysis
+    persuasion_analysis: PersuasionAnalysis
     motif_function_analysis: MotifFunctionAnalysis
     closure_analysis: ClosureAnalysis
     discourse_units: tuple[DiscourseUnit, ...]
@@ -188,6 +193,39 @@ def _control_summary(
         z=z_value,
         samples=len(array),
     )
+
+
+def _random_order_z(
+    vectors: np.ndarray,
+    *,
+    primary_window: int,
+    shuffle_count: int,
+    seed: int,
+    decay: float,
+) -> float:
+    """Compute a content-only random-order Z without report-side aggregation."""
+
+    if len(vectors) < 4:
+        return 0.0
+    matrix = normalize_rows(vectors)
+    states = causal_history_states(matrix, primary_window, decay=decay)
+    original = mean_consistency(matrix, states)
+    rng = np.random.default_rng(seed)
+    values = [
+        consistency_for_permutation(
+            matrix,
+            order,
+            primary_window,
+            decay=decay,
+        )[0]
+        for order in generate_permutations(
+            "random",
+            len(matrix),
+            shuffle_count,
+            rng,
+        )
+    ]
+    return _z_score(original, np.asarray(values, dtype=float))[2]
 
 
 def _sentence_role(
@@ -304,6 +342,8 @@ def compute_fingerprint(
     segments: Sequence[Sequence[int]] | None = None,
     sections: Sequence[SectionSpan] | None = None,
     document_structure: Mapping[str, object] | None = None,
+    content_vectors: np.ndarray | None = None,
+    content_indices: Sequence[int] | None = None,
 ) -> FingerprintResult:
     """Measure history-conditioned coherence against order null models."""
 
@@ -324,6 +364,30 @@ def compute_fingerprint(
     clean_windows = tuple(sorted({int(value) for value in windows if value >= 1}))
     if primary_window not in clean_windows:
         clean_windows = tuple(sorted((*clean_windows, primary_window)))
+
+    layer_preview = analyze_document_layers(sentences)
+    selected_content_indices = tuple(
+        int(value)
+        for value in (
+            content_indices
+            if content_indices is not None
+            else layer_preview.content_indices
+        )
+    )
+    if any(
+        value < 0 or value >= len(sentences)
+        for value in selected_content_indices
+    ):
+        raise ValueError("content indices must refer to existing sentences")
+    if len(set(selected_content_indices)) != len(selected_content_indices):
+        raise ValueError("content indices must be unique")
+    content_sentences = [sentences[index] for index in selected_content_indices]
+    if content_vectors is None:
+        content_matrix = matrix[list(selected_content_indices)]
+    else:
+        if len(content_vectors) != len(content_sentences):
+            raise ValueError("content sentence and vector counts must match")
+        content_matrix = normalize_rows(content_vectors)
 
     states = causal_history_states(matrix, primary_window, decay=decay)
     original_sentence_consistency = history_consistency(matrix, states)
@@ -431,6 +495,33 @@ def compute_fingerprint(
         shuffle_count=shuffle_count,
         seed=seed,
     )
+    content_lexical_z = _random_order_z(
+        content_matrix,
+        primary_window=primary_window,
+        shuffle_count=shuffle_count,
+        seed=seed,
+        decay=decay,
+    )
+    content_relations = analyze_relations(
+        content_sentences,
+        lexical_z=content_lexical_z,
+        shuffle_count=shuffle_count,
+        seed=seed,
+    )
+    content_z = max(
+        content_lexical_z,
+        content_relations.relational_order_z,
+    )
+    persuasion = analyze_persuasion(
+        sentences,
+        content_z=content_z,
+        content_components={
+            "lexical_order_z": content_lexical_z,
+            "relational_order_z": content_relations.relational_order_z,
+        },
+        shuffle_count=shuffle_count,
+        seed=seed,
+    )
     closure = analyze_closure(sentences)
     changes = history_change(states)
     effective_sections = tuple(
@@ -496,6 +587,32 @@ def compute_fingerprint(
         closure_roles.setdefault(index, []).append("execution")
     for index in closure.deferment_indices:
         closure_roles.setdefault(index, []).append("deferred")
+    persuasion_by_sentence = {
+        item.sentence_index: item
+        for item in persuasion.reader_transformations
+    }
+    persuasion_events_by_sentence: dict[int, list[str]] = {}
+    for event in persuasion.funnel.events:
+        persuasion_events_by_sentence.setdefault(
+            event.sentence_index, []
+        ).append(event.role)
+    layers_by_sentence = {
+        item.sentence_index: item.layer
+        for item in persuasion.document_layers.records
+    }
+    evidence_by_sentence = {
+        item.sentence_index: item
+        for item in persuasion.evidence.records
+    }
+    modality_by_sentence = {
+        item.sentence_index: item
+        for item in persuasion.modality.records
+    }
+    metaphor_by_sentence: dict[int, list[str]] = {}
+    for item in persuasion.metaphor_audit.claims:
+        metaphor_by_sentence.setdefault(item.sentence_index, []).append(
+            f"{item.metaphor}:{item.stage}"
+        )
     raw_sentence_rows = tuple(
         {
             "index": index,
@@ -550,6 +667,21 @@ def compute_fingerprint(
                 motif_functions_by_sentence.get(index, [])
             ),
             "closure_role": "; ".join(closure_roles.get(index, [])),
+            "document_layer": layers_by_sentence.get(index, "editorial_body"),
+            "persuasion_events": "; ".join(
+                persuasion_events_by_sentence.get(index, [])
+            ),
+            "reader_state": persuasion_by_sentence[index].reader_state,
+            "cause_role": persuasion_by_sentence[index].cause_role,
+            "solution_role": persuasion_by_sentence[index].solution_role,
+            "offer_role": persuasion_by_sentence[index].offer_role,
+            "evidence_type": evidence_by_sentence[index].evidence_type,
+            "evidence_strength": evidence_by_sentence[index].strength,
+            "claim_modality": modality_by_sentence[index].label,
+            "claim_certainty": modality_by_sentence[index].certainty,
+            "metaphor_claims": "; ".join(
+                metaphor_by_sentence.get(index, [])
+            ),
             "role": _sentence_role(
                 index, float(sentence_z[index]), float(turn_sentence_z[index]), motifs
             ),
@@ -591,6 +723,47 @@ def compute_fingerprint(
         licensed_indices=licensed_indices,
         scope_warning_indices=scope_warning_indices,
     )
+    if persuasion.sequence_audit.insufficient_evidence_warning:
+        risks.append(
+            {
+                "risk": "sequence_necessity_under_supported",
+                "sentences": [
+                    item.sentence_index
+                    for item in persuasion.sequence_audit.claims
+                ],
+                "severity": 1.0 - persuasion.sequence_audit.necessity_score,
+            }
+        )
+    if persuasion.metaphor_audit.reification_score >= 0.40:
+        risks.append(
+            {
+                "risk": "metaphor_reification",
+                "sentences": [
+                    item.sentence_index
+                    for item in persuasion.metaphor_audit.claims
+                    if item.stage in {"mapping_claim", "causal_guarantee"}
+                ],
+                "severity": persuasion.metaphor_audit.reification_score,
+            }
+        )
+    if persuasion.modality.unsupported_escalation >= 0.10:
+        risks.append(
+            {
+                "risk": "unsupported_modality_escalation",
+                "severity": persuasion.modality.unsupported_escalation,
+            }
+        )
+    if persuasion.modality.unsupported_scope_expansion >= 0.25:
+        risks.append(
+            {
+                "risk": "unsupported_subject_scope_expansion",
+                "sentences": [
+                    item.sentence_index
+                    for item in persuasion.modality.scope_records
+                ],
+                "severity": persuasion.modality.unsupported_scope_expansion,
+            }
+        )
     lexical_structure = _structure_type(
         order_z=order_z,
         reverse_directionality=reverse_directionality,
@@ -616,16 +789,18 @@ def compute_fingerprint(
     )
 
     return FingerprintResult(
-        version="0.5.0",
+        version="0.6.0",
         sentence_count=len(sentences),
-        primary_metric="Z_lexical + Z_relational",
+        primary_metric="Z_content + Z_persuasion",
         primary_window=primary_window,
         order_z=order_z,
         lexical_order_z=order_z,
         relational_order_z=relations.relational_order_z,
+        content_z=content_z,
+        persuasion_z=persuasion.persuasion_z,
         gate=(
             "supported"
-            if order_z >= 2.0 or relations.relational_order_z >= 2.0
+            if content_z >= 2.0 or persuasion.persuasion_z >= 2.0
             else "unsupported"
         ),
         original_consistency=original_consistency,
@@ -644,6 +819,7 @@ def compute_fingerprint(
         qa_closure=qa_closure,
         claim_scope_audit=claim_scope,
         relational_analysis=relations,
+        persuasion_analysis=persuasion,
         motif_function_analysis=motif_functions,
         closure_analysis=closure,
         discourse_units=discourse_units,
@@ -657,9 +833,12 @@ def compute_fingerprint(
         seed=seed,
         shuffle_count=shuffle_count,
         disclaimer=(
-            "Z_lexical and Z_relational are statistical evidence for lexical "
-            "and relation-conditioned structure. They are not authorship "
-            "probabilities or writing-quality scores."
+            "Z_content and Z_persuasion are separate order-evidence channels. "
+            "Z_content is the unadjusted maximum of the preregistered lexical "
+            "and relational content Z values and requires corpus calibration. "
+            "Responsibility relief, emotional sequence, and funnel structure "
+            "are descriptive and do not prove manipulation, truth, authorship, "
+            "or writing quality."
         ),
     )
 
@@ -706,6 +885,16 @@ def analyze_text(
         }
     selected_encoder = encoder or TfidfSentenceEncoder()
     vectors = selected_encoder.encode(sentences)
+    layer_preview = analyze_document_layers(sentences)
+    content_indices = layer_preview.content_indices
+    if len(content_indices) == len(sentences):
+        content_vectors = vectors
+    elif not content_indices:
+        content_vectors = np.empty((0, vectors.shape[1]), dtype=float)
+    else:
+        content_vectors = selected_encoder.encode(
+            [sentences[index] for index in content_indices]
+        )
     return compute_fingerprint(
         sentences,
         vectors,
@@ -718,4 +907,6 @@ def analyze_text(
         segments=analysis_segments(len(sentences), paragraphs),
         sections=sections,
         document_structure=structure_payload,
+        content_vectors=content_vectors,
+        content_indices=content_indices,
     )

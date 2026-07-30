@@ -41,6 +41,15 @@ jobs:
           test -s reports/smoke/motif_functions.csv
           test -s reports/smoke/closure_states.csv
           test -s reports/smoke/discourse_units.csv
+          test -s reports/smoke/causal_substitutions.csv
+          test -s reports/smoke/responsibility_shifts.csv
+          test -s reports/smoke/evidence_types.csv
+          test -s reports/smoke/sequence_audit.csv
+          test -s reports/smoke/metaphor_audit.csv
+          test -s reports/smoke/modality_history.csv
+          test -s reports/smoke/persuasion_events.csv
+          test -s reports/smoke/document_layers.csv
+          test -s reports/smoke/funnel.csv
           test -s reports/smoke/section_graph.csv
           test -s reports/smoke/document_blocks.csv
           test -s reports/smoke/report.pdf

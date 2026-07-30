@@ -98,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         lexical = _analyze(text, "tfidf", args)
         semantic = _analyze(text, "e5", args)
         payload = {
-            "version": "0.5.0",
+            "version": "0.6.0",
             "channels": {
                 "lexical": lexical.to_dict(),
                 "semantic": semantic.to_dict(),

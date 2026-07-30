@@ -11,6 +11,7 @@ from .features import (
     split_sentences,
 )
 from .motif_functions import MotifFunctionAnalysis, analyze_motif_functions
+from .persuasion import PersuasionAnalysis, analyze_persuasion
 from .relations import RelationalAnalysis, analyze_relations
 from .reporting import write_report_bundle
 
@@ -20,12 +21,14 @@ __all__ = [
     "DirectionalityResult",
     "MotifFunctionAnalysis",
     "ParsedDocument",
+    "PersuasionAnalysis",
     "RelationalAnalysis",
     "SentenceTransformerEncoder",
     "TfidfSentenceEncoder",
     "analyze_text",
     "analyze_closure",
     "analyze_motif_functions",
+    "analyze_persuasion",
     "analyze_relations",
     "conditional_directionality",
     "compute_fingerprint",
@@ -34,4 +37,4 @@ __all__ = [
     "write_report_bundle",
 ]
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .features import FingerprintResult
+from .reporting_v06 import write_v06_tables
 
 
 def _pdf_escape(value: str) -> str:
@@ -25,7 +26,10 @@ def _write_summary_pdf(path: Path, result: FingerprintResult) -> None:
     """Write a dependency-free, ASCII summary PDF."""
 
     lines = [
-        "ATCT Narrative Fingerprint v0.5",
+        "ATCT Narrative Fingerprint v0.6",
+        f"Content order: Z_content = {result.content_z:.4f}",
+        f"Persuasion order: Z_persuasion = {result.persuasion_z:.4f}",
+        f"Content/persuasion quadrant: {result.persuasion_analysis.quadrant}",
         f"Lexical order: Z_lexical = {result.lexical_order_z:.4f}",
         f"Relational order: Z_relational = {result.relational_order_z:.4f}",
         f"Quadrant: {result.relational_analysis.quadrant}",
@@ -116,7 +120,7 @@ def write_report_bundle(
     *,
     fingerprint_payload: Mapping[str, object] | None = None,
 ) -> dict[str, str]:
-    """Write the complete v0.5 report bundle and return generated paths."""
+    """Write the complete v0.6 report bundle and return generated paths."""
 
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
@@ -151,6 +155,17 @@ def write_report_bundle(
         "relation_flip",
         "motif_functions",
         "closure_role",
+        "document_layer",
+        "persuasion_events",
+        "reader_state",
+        "cause_role",
+        "solution_role",
+        "offer_role",
+        "evidence_type",
+        "evidence_strength",
+        "claim_modality",
+        "claim_certainty",
+        "metaphor_claims",
         "licensed_jump",
         "role",
     ]
@@ -406,6 +421,8 @@ def write_report_bundle(
         writer.writeheader()
         writer.writerows(block_rows)
 
+    v06_paths = write_v06_tables(result, destination)
+
     report_path = destination / "report.md"
     controls = "\n".join(
         f"- {name}: effect={summary.effect:.4f}, "
@@ -415,8 +432,15 @@ def write_report_bundle(
     report_path.write_text(
         "\n".join(
             [
-                "# ATCT Narrative Fingerprint v0.5",
+                "# ATCT Narrative Fingerprint v0.6",
                 "",
+                f"- **Z_content:** {result.content_z:.4f}",
+                f"- **Z_persuasion:** {result.persuasion_z:.4f}",
+                f"- **内容／説得四象限:** {result.persuasion_analysis.quadrant}",
+                (
+                    f"- **Z_content方式:** "
+                    f"{result.persuasion_analysis.content_method}"
+                ),
                 f"- **Z_lexical:** {result.lexical_order_z:.4f}",
                 f"- **Z_relational:** {result.relational_order_z:.4f}",
                 f"- **四象限:** {result.relational_analysis.quadrant}",
@@ -461,6 +485,36 @@ def write_report_bundle(
                 (
                     f"- **留保スコープ警告:** "
                     f"{len(result.claim_scope_audit.findings)}"
+                ),
+                (
+                    f"- **原因置換:** "
+                    f"{len(result.persuasion_analysis.causal_frames.substitutions)}"
+                ),
+                (
+                    f"- **自己責任解除:** "
+                    f"{result.persuasion_analysis.responsibility.relief_score:.4f}"
+                ),
+                (
+                    f"- **順序必然性:** "
+                    f"{result.persuasion_analysis.sequence_audit.necessity_score:.4f}"
+                ),
+                (
+                    f"- **比喩実体化:** "
+                    f"{result.persuasion_analysis.metaphor_audit.reification_score:.4f}"
+                ),
+                (
+                    f"- **断定上昇警告:** "
+                    f"{result.persuasion_analysis.modality.unsupported_escalation:.4f}"
+                ),
+                (
+                    f"- **販売ファネル:** "
+                    f"{result.persuasion_analysis.funnel.funnel_score:.4f}"
+                ),
+                (
+                    f"- **本文終了／販促開始:** "
+                    f"{result.persuasion_analysis.document_layers.editorial_end_index}"
+                    " / "
+                    f"{result.persuasion_analysis.document_layers.promotion_start_index}"
                 ),
                 "",
                 "## 順序対照",
@@ -508,6 +562,7 @@ def write_report_bundle(
         "discourse_units": str(discourse_path),
         "section_graph": str(section_path),
         "document_blocks": str(block_path),
+        **v06_paths,
         "markdown": str(report_path),
         "pdf": str(pdf_path),
     }

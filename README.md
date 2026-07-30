@@ -1,11 +1,22 @@
-# ATCT Narrative Fingerprint v0.5
+# ATCT Narrative Fingerprint v0.6
 
 **文章がどのような履歴依存構造で生成されたかを測るチェッカー**
 
-The fixed research question remains:
+The v0.6 research question is:
 
-> Is the original history-conditioned coherence significantly higher than
-> content-preserving order controls?
+> In what order does a document transform the reader's problem, cause, and
+> solution recognition, and where does that transformation connect to an
+> offer?
+
+The report keeps content structure and persuasion structure separate:
+
+| Channel | Primary evidence |
+|---|---|
+| `Z_content` | strongest preregistered content-order channel after promotional-tail exclusion |
+| `Z_persuasion` | ordered persuasion milestones versus shuffled milestone positions |
+
+The component values behind `Z_content` remain visible as `Z_lexical` and
+`Z_relational`; they are not averaged into a writing-quality score.
 
 The lexical primary metric remains:
 
@@ -59,6 +70,35 @@ structure. The former fixed 0–100 aggregate display score has been removed.
 | `≥ 3` | very strong order dependence |
 
 The threshold is a research convention, not a universal calibration.
+
+## v0.6 changes
+
+Each sentence receives a reader-transformation frame:
+
+```text
+(reader_state, cause_role, emotion_role, solution_role, offer_role,
+ modality, evidence_type)
+```
+
+The new audit reports:
+
+- rejected and adopted causes as a causal-substitution graph;
+- responsibility movement from personality to state, method, or environment;
+- evidence types without treating analogy or testimony as experiment;
+- asserted stage order, its alignment with earlier stage mentions, and six
+  missing-order-evidence checks;
+- explanatory metaphor, mapping claim, and causal reification separately;
+- personal-to-universal subject-scope expansion and unsupported certainty
+  escalation;
+- pain, relief, cause replacement, solution, branded solution, and offer as an
+  ordered persuasion null model;
+- the transition from generic guidance to a named framework;
+- editorial, testimony, framework, summary, lead-magnet, cross-promotion,
+  follow, social-proof, backlink, and hashtag layers.
+
+`lead_magnet` and later promotional layers are excluded when `Z_content` is
+encoded, while remaining available to `Z_persuasion`. See
+[`docs/V06_IMPLEMENTATION_NOTES.md`](docs/V06_IMPLEMENTATION_NOTES.md).
 
 ## v0.5 changes
 
@@ -135,6 +175,8 @@ logical validity, or literary quality. `Z_order` remains the only primary gate.
 
 ### Structure strength
 
+- content-only `Z_content`;
+- milestone-order `Z_persuasion`;
 - random-shuffle `Z_order`;
 - adjacent, paragraph-internal, block, paragraph-order, section-order, random,
   and reverse controls;
@@ -167,6 +209,9 @@ logical validity, or literary quality. `Z_order` remains the only primary gate.
   density;
 - explicit risk locations for duplication, topic deviation, unexplained
   transitions, short-sentence concentration, and opening/body mismatch.
+- source-localized cause replacement, responsibility shift, evidence type,
+  stage-order support, metaphor reification, modality escalation, document
+  layer, and persuasion-funnel records.
 
 ## Encoder roles
 
@@ -224,6 +269,15 @@ reports/article/
 ├── motif_functions.csv
 ├── closure_states.csv
 ├── discourse_units.csv
+├── causal_substitutions.csv
+├── responsibility_shifts.csv
+├── evidence_types.csv
+├── sequence_audit.csv
+├── metaphor_audit.csv
+├── modality_history.csv
+├── persuasion_events.csv
+├── document_layers.csv
+├── funnel.csv
 ├── section_graph.csv
 ├── document_blocks.csv
 ├── report.md
@@ -242,12 +296,12 @@ atct-fingerprint evaluate data/confirmatory.csv --encoder e5
 ```
 
 It rejects AI-source overlap and normalized duplicate documents between train
-and test. This benchmark does not replace the v0.4 primary document-level
-`Z_order` proposition.
+and test. This benchmark does not replace the document-level content and
+persuasion intervention protocol.
 
 ## Validation status
 
-The implementation includes 49 deterministic tests. They cover
+The implementation includes 57 deterministic tests. They cover
 current-sentence exclusion, Markdown layer separation, hierarchical order
 controls, reversal of the asymmetric direction score, rolling prediction
 without future-target leakage, 30-seed sign stability, shuffled-chain
@@ -255,6 +309,9 @@ falsification, motif deletion, exact-copy rejection, Licensed Jump handling,
 motif role shifts, contrastive branches, question–answer closure, claim-scope
 drift, target-label reversal, relation destruction, predicate paraphrase,
 functional-motif replacement, closure completion, and report generation.
+v0.6 additionally tests stage reversal, offer deletion, brand-name removal,
+testimony deletion, modality hedging, metaphor concretization, adopted-cause
+replacement, promotional-layer exclusion, and same-seed persuasion nulls.
 
 The PR remains a research preview until real Japanese E5 corpora pass the full
 acceptance matrix, especially literal sentence split/merge tolerance within

@@ -1,22 +1,24 @@
-# ATCT Narrative Fingerprint v0.5 research protocol
+# ATCT Narrative Fingerprint v0.6 research protocol
 
 ## Fixed proposition
 
-> Do lexical history and subject-predicate-target history retain significantly
-> more ordered structure than their content-preserving controls?
+> In what order does a document transform problem, cause, and solution
+> recognition, and where does that transformation connect to an offer?
 
-The proposition is evaluated through two non-aggregated evidence channels.
+The proposition is evaluated without collapsing content and persuasion into a
+single quality score.
 
 | Item | Fixed choice |
 |---|---|
-| Primary lexical metric | `Z_lexical` |
-| Primary relational metric | `Z_relational` |
+| Primary content display | `Z_content`, with lexical and relational components retained |
+| Primary persuasion metric | `Z_persuasion` |
 | Primary history window | 5 preceding sentences |
 | Baseline | v0.1 history state that includes the current sentence |
 | Lexical null | complete random sentence order |
 | Relational null | shuffled relation-frame positions |
-| Descriptive support | either preregistered channel reaches Z ≥2 and loses the signal under its null |
-| Unsupported | both channels remain below Z=2 |
+| Persuasion null | shuffled observed milestone positions |
+| Descriptive support | the preregistered channel reaches Z ≥2 and loses the signal under its matching intervention |
+| Unsupported | the preregistered channel remains below Z=2 |
 | Mechanism falsification | the relevant shuffle retains comparable Z |
 | Implementation falsification | surface length, sentence count, or target labels spuriously dominate |
 
@@ -54,6 +56,22 @@ and intensity changes against shuffled frame positions.
 
 The CI extractor is a deterministic Japanese construction baseline. Production
 claims require a frozen semantic-role model and manually annotated corpus.
+
+## Persuasion history
+
+The expected event order is pain, relief, causal substitution, solution,
+branded solution, and offer. The statistic is pairwise order concordance. The
+null permutes the positions of only the milestones actually observed, so
+coverage and order are reported separately.
+
+Cause replacement, responsibility category, evidence type, stage-order
+support, metaphor status, modality, subject scope, branding boundary, and
+document layer remain independently inspectable. None is treated as evidence
+that persuasion is unethical.
+
+The first promotional-tail marker separates editorial content from the offer.
+For document-local TF-IDF, content sentences are re-encoded without the
+promotional tail before `Z_content` is calculated.
 
 ## Null models
 
@@ -116,6 +134,9 @@ The report preserves:
 
 - aggregate control distributions and `Z_lexical`;
 - relation frames, target asymmetry, relation flips, and `Z_relational`;
+- content-only `Z_content` and milestone-order `Z_persuasion`;
+- causal substitution, responsibility, evidence, sequence, metaphor,
+  modality, funnel, and document-layer evidence;
 - every sentence's evidence and structural role;
 - ranked turning points;
 - transformed motif and duplicate pair tables;
@@ -140,7 +161,8 @@ No 0–100 writing-quality score is emitted.
 
 - **Support:** a preregistered channel reaches Z ≥2 and loses the signal under
   its corresponding order intervention.
-- **Unsupported:** both `Z_lexical` and `Z_relational` remain below 2.
+- **Unsupported:** the preregistered content or persuasion channel remains
+  below 2.
 - **Mechanism falsified:** the corresponding shuffle retains comparable evidence.
 - **Implementation falsified:** split/merge, short-sentence rate, or document
   length dominates the result.
