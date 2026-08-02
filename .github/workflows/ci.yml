@@ -50,7 +50,24 @@ jobs:
           test -s reports/smoke/persuasion_events.csv
           test -s reports/smoke/document_layers.csv
           test -s reports/smoke/funnel.csv
+          test -s reports/smoke/desire_frames.csv
+          test -s reports/smoke/cause_candidates_v07.csv
+          test -s reports/smoke/cause_competition.csv
+          test -s reports/smoke/metaphor_roles_v07.csv
+          test -s reports/smoke/causal_layers.csv
+          test -s reports/smoke/transformation_v07.csv
+          test -s reports/smoke/autonomy_v07.csv
+          test -s reports/smoke/title_body_scope.csv
+          test -s reports/smoke/recursive_cycles.csv
+          test -s reports/smoke/v07_components.csv
           test -s reports/smoke/section_graph.csv
           test -s reports/smoke/document_blocks.csv
           test -s reports/smoke/report.pdf
           python -m json.tool reports/smoke/fingerprint.json > /dev/null
+          python - <<'PY'
+          import json
+          with open("reports/smoke/fingerprint.json", encoding="utf-8") as handle:
+              payload = json.load(handle)
+          assert payload["version"] == "0.7.0"
+          assert "semantic_structure_analysis" in payload
+          PY

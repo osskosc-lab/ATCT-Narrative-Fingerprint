@@ -1,9 +1,9 @@
-# ATCT Narrative Fingerprint v0.6 research protocol
+# ATCT Narrative Fingerprint v0.7 research protocol
 
 ## Fixed proposition
 
-> In what order does a document transform problem, cause, and solution
-> recognition, and where does that transformation connect to an offer?
+> Can the checker detect exclusive deep reframing in a title while the body
+> retains a non-exclusive, multi-cause explanation?
 
 The proposition is evaluated without collapsing content and persuasion into a
 single quality score.
@@ -17,6 +17,8 @@ single quality score.
 | Lexical null | complete random sentence order |
 | Relational null | shuffled relation-frame positions |
 | Persuasion null | shuffled observed milestone positions |
+| Phase-1 semantic target | title/body exclusion-scope Macro-F1 on a frozen annotated corpus |
+| Phase-1 deterministic contrast | same body with `Xではない` versus `Xだけではない` title |
 | Descriptive support | the preregistered channel reaches Z ≥2 and loses the signal under its matching intervention |
 | Unsupported | the preregistered channel remains below Z=2 |
 | Mechanism falsification | the relevant shuffle retains comparable Z |
@@ -72,6 +74,34 @@ that persuasion is unethical.
 The first promotional-tail marker separates editorial content from the offer.
 For document-local TF-IDF, content sentences are re-encoded without the
 promotional tail before `Z_content` is calculated.
+
+## v0.7 semantic interpretation audit
+
+The rule baseline preserves three desire depths and all candidate causes before
+ranking an interpretation. A candidate may be `supported`, `possible`,
+`rejected`, or `not_examined`; the last state is visible but contributes no
+support. Thus an absent real-world cause is not silently removed or falsely
+presented as evidence.
+
+The primary Phase-1 contrast is title scope. `Xではない` is exclusive;
+`Xだけではない` is non-exclusive. A mismatch is reported when title
+exclusion exceeds body exclusion and the body retains alternative-cause
+evidence. Macro-F1 remains pending until labels and a test split are frozen.
+
+Secondary v0.7 components remain independently inspectable:
+
+- desire-depth evidence and deep-redefinition support;
+- cause monopoly and competing-cause retention;
+- institution → exploration → agency → meaning order concordance;
+- OS role transition and metaphor overcompression;
+- Transformation variable, before/after states, observable marker, and
+  re-change condition;
+- five operational autonomy conditions;
+- Shadow → Seeking → Transformation → New Shadow recurrence.
+
+The weighted v0.7 component index is descriptive rule coverage. It cannot
+establish the true cause of a person's desire or replace labor, medical,
+financial, or psychological assessment.
 
 ## Null models
 
@@ -137,6 +167,9 @@ The report preserves:
 - content-only `Z_content` and milestone-order `Z_persuasion`;
 - causal substitution, responsibility, evidence, sequence, metaphor,
   modality, funnel, and document-layer evidence;
+- desire frames, title/body scope, cause candidates and competition, causal
+  layers, metaphor roles, Transformation, autonomy, and recursive-cycle
+  evidence;
 - every sentence's evidence and structural role;
 - ranked turning points;
 - transformed motif and duplicate pair tables;

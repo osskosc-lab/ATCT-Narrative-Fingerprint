@@ -10,6 +10,7 @@ from typing import Mapping
 
 from .features import FingerprintResult
 from .reporting_v06 import write_v06_tables
+from .reporting_v07 import write_v07_tables
 
 
 def _pdf_escape(value: str) -> str:
@@ -26,7 +27,7 @@ def _write_summary_pdf(path: Path, result: FingerprintResult) -> None:
     """Write a dependency-free, ASCII summary PDF."""
 
     lines = [
-        "ATCT Narrative Fingerprint v0.6",
+        "ATCT Narrative Fingerprint v0.7",
         f"Content order: Z_content = {result.content_z:.4f}",
         f"Persuasion order: Z_persuasion = {result.persuasion_z:.4f}",
         f"Content/persuasion quadrant: {result.persuasion_analysis.quadrant}",
@@ -56,6 +57,22 @@ def _write_summary_pdf(path: Path, result: FingerprintResult) -> None:
         f"Concept branches: {len(result.concept_branches)}",
         f"Q-A closure score: {result.qa_closure.best_score:.4f}",
         f"Claim-scope warnings: {len(result.claim_scope_audit.findings)}",
+        (
+            "Title/body scope mismatch: "
+            f"{result.semantic_structure_analysis.title_body_scope.mismatch:.4f}"
+        ),
+        (
+            "Deep reframing evidence: "
+            f"{result.semantic_structure_analysis.deep_redefinition_score:.4f}"
+        ),
+        (
+            "Multi-cause bridge: "
+            f"{result.semantic_structure_analysis.multi_cause_score:.4f}"
+        ),
+        (
+            "Transformation completeness: "
+            f"{result.semantic_structure_analysis.transformation_completeness:.4f}"
+        ),
         "",
         "Controls:",
     ]
@@ -120,7 +137,7 @@ def write_report_bundle(
     *,
     fingerprint_payload: Mapping[str, object] | None = None,
 ) -> dict[str, str]:
-    """Write the complete v0.6 report bundle and return generated paths."""
+    """Write the complete v0.7 report bundle and return generated paths."""
 
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
@@ -166,6 +183,14 @@ def write_report_bundle(
         "claim_modality",
         "claim_certainty",
         "metaphor_claims",
+        "desire_frames",
+        "v07_cause_candidates",
+        "v07_metaphor_roles",
+        "causal_layer_roles",
+        "transformation_evidence",
+        "autonomy_conditions",
+        "recursive_cycle_roles",
+        "semantic_discourse_role",
         "licensed_jump",
         "role",
     ]
@@ -422,6 +447,7 @@ def write_report_bundle(
         writer.writerows(block_rows)
 
     v06_paths = write_v06_tables(result, destination)
+    v07_paths = write_v07_tables(result, destination)
 
     report_path = destination / "report.md"
     controls = "\n".join(
@@ -429,10 +455,11 @@ def write_report_bundle(
         f"Z={'n/a' if summary.z is None else f'{summary.z:.4f}'}"
         for name, summary in result.controls.items()
     )
+    semantic = result.semantic_structure_analysis
     report_path.write_text(
         "\n".join(
             [
-                "# ATCT Narrative Fingerprint v0.6",
+                "# ATCT Narrative Fingerprint v0.7",
                 "",
                 f"- **Z_content:** {result.content_z:.4f}",
                 f"- **Z_persuasion:** {result.persuasion_z:.4f}",
@@ -517,6 +544,53 @@ def write_report_bundle(
                     f"{result.persuasion_analysis.document_layers.promotion_start_index}"
                 ),
                 "",
+                "## v0.7 深層意味構造（構成要素を個別表示）",
+                "",
+                (
+                    f"- **表面欲求:** "
+                    f"{semantic.desires.surface_desire}"
+                ),
+                (
+                    f"- **中間目的:** "
+                    f"{semantic.desires.intermediate_desire}"
+                ),
+                (
+                    f"- **深層価値候補:** "
+                    f"{semantic.desires.deep_desire}"
+                ),
+                (
+                    f"- **タイトル―本文範囲不整合:** "
+                    f"{semantic.title_body_scope.mismatch:.4f}"
+                ),
+                (
+                    f"- **原因独占率:** "
+                    f"{semantic.cause_competition.cause_monopoly:.4f}"
+                ),
+                (
+                    f"- **制度―個人因果ブリッジ:** "
+                    f"{semantic.causal_layers.bridge_score:.4f}"
+                ),
+                (
+                    f"- **Transformation操作性:** "
+                    f"{semantic.transformation.operationality:.4f}"
+                ),
+                (
+                    f"- **自律性:** "
+                    f"{semantic.autonomy.autonomy_score:.4f}"
+                ),
+                (
+                    f"- **OS役割遷移:** "
+                    f"{semantic.metaphor_roles.transition_score:.4f}"
+                ),
+                (
+                    f"- **再帰的Transformation:** "
+                    f"{semantic.recursive_cycle.score:.4f}"
+                ),
+                (
+                    f"- **v0.7構成要素指数（品質点ではない）:** "
+                    f"{semantic.v07_component_index:.4f}"
+                ),
+                "",
                 "## 順序対照",
                 "",
                 controls,
@@ -563,6 +637,7 @@ def write_report_bundle(
         "section_graph": str(section_path),
         "document_blocks": str(block_path),
         **v06_paths,
+        **v07_paths,
         "markdown": str(report_path),
         "pdf": str(pdf_path),
     }

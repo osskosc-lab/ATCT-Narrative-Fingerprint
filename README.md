@@ -1,19 +1,21 @@
-# ATCT Narrative Fingerprint v0.6
+# ATCT Narrative Fingerprint v0.7
 
 **文章がどのような履歴依存構造で生成されたかを測るチェッカー**
 
-The v0.6 research question is:
+The v0.7 research question is:
 
-> In what order does a document transform the reader's problem, cause, and
-> solution recognition, and where does that transformation connect to an
-> offer?
+> Which deeper desire or cause does a document propose, and does that
+> interpretation preserve competing real-world causes instead of erasing
+> them?
 
-The report keeps content structure and persuasion structure separate:
+The report keeps order, persuasion, and semantic-interpretation evidence
+separate:
 
 | Channel | Primary evidence |
 |---|---|
 | `Z_content` | strongest preregistered content-order channel after promotional-tail exclusion |
 | `Z_persuasion` | ordered persuasion milestones versus shuffled milestone positions |
+| v0.7 semantic components | desire depth, exclusion scope, cause competition, causal layers, transformation, autonomy, metaphor roles, and recurrence |
 
 The component values behind `Z_content` remain visible as `Z_lexical` and
 `Z_relational`; they are not averaged into a writing-quality score.
@@ -69,7 +71,47 @@ structure. The former fixed 0–100 aggregate display score has been removed.
 | `2–3` | clear order dependence |
 | `≥ 3` | very strong order dependence |
 
-The threshold is a research convention, not a universal calibration.
+The threshold is a research convention, not a universal calibration. The
+v0.7 component index is a 0–1 rule-coverage summary and is likewise not a
+quality score or a calibrated probability.
+
+## v0.7 changes
+
+v0.7 separates an asserted desire into:
+
+\[
+\text{surface action}\rightarrow\text{intermediate purpose}\rightarrow
+\text{deep value}.
+\]
+
+It then audits whether that deeper interpretation has become an exclusive
+claim. In particular, the Phase-1 baseline distinguishes `Xではない` from
+`Xだけではない`, compares a Markdown title with body scope, and keeps the
+supporting title/body spans.
+
+The semantic-structure channel also:
+
+- retains value conflict, work environment, income, health, relationship,
+  job fit, family constraint, and social norm as supported, possible,
+  rejected, or explicitly `not_examined` candidates;
+- reports cause monopoly and `single_cause_overcompression` without inventing
+  support for absent causes;
+- tests the ordered bridge institution → exploration possibility → individual
+  agency → meaning reconstruction;
+- tracks OS as social standard, internalized rule, reality mismatch, error
+  detector, rewrite target, and self-revision system;
+- separates a changed variable, initial state, changed state, observable
+  marker, and re-change condition;
+- separates subjective ownership from reason explanation, trade-off
+  awareness, alternative comparison, revisability, and external/self criteria;
+- requires an explicit New Shadow before classifying a recursive
+  Shadow–Seeking–Transformation cycle;
+- attaches an evidence span and `rule_or_model` provenance to every extracted
+  frame.
+
+The target Phase-1 Macro-F1 is not reported yet: it requires a frozen,
+independently annotated title/body scope corpus. See
+[`docs/V07_IMPLEMENTATION_NOTES.md`](docs/V07_IMPLEMENTATION_NOTES.md).
 
 ## v0.6 changes
 
@@ -212,6 +254,9 @@ logical validity, or literary quality. `Z_order` remains the only primary gate.
 - source-localized cause replacement, responsibility shift, evidence type,
   stage-order support, metaphor reification, modality escalation, document
   layer, and persuasion-funnel records.
+- source-localized desire depth, title/body scope, competing causes,
+  institution/individual causal layers, metaphor roles, transformation
+  operationality, autonomy conditions, and recursive-cycle evidence.
 
 ## Encoder roles
 
@@ -278,6 +323,16 @@ reports/article/
 ├── persuasion_events.csv
 ├── document_layers.csv
 ├── funnel.csv
+├── desire_frames.csv
+├── cause_candidates_v07.csv
+├── cause_competition.csv
+├── metaphor_roles_v07.csv
+├── causal_layers.csv
+├── transformation_v07.csv
+├── autonomy_v07.csv
+├── title_body_scope.csv
+├── recursive_cycles.csv
+├── v07_components.csv
 ├── section_graph.csv
 ├── document_blocks.csv
 ├── report.md
@@ -301,7 +356,7 @@ persuasion intervention protocol.
 
 ## Validation status
 
-The implementation includes 57 deterministic tests. They cover
+The implementation includes 66 deterministic tests. They cover
 current-sentence exclusion, Markdown layer separation, hierarchical order
 controls, reversal of the asymmetric direction score, rolling prediction
 without future-target leakage, 30-seed sign stability, shuffled-chain
@@ -312,6 +367,10 @@ functional-motif replacement, closure completion, and report generation.
 v0.6 additionally tests stage reversal, offer deletion, brand-name removal,
 testimony deletion, modality hedging, metaphor concretization, adopted-cause
 replacement, promotional-layer exclusion, and same-seed persuasion nulls.
+v0.7 additionally tests exclusive/nonexclusive title swapping, competing-cause
+deletion, fixed-role metaphor replacement, vague Transformation replacement,
+autonomy evidence addition, New Shadow deletion, vocabulary-preserving causal
+reversal, Markdown-title integration, and exact deterministic reproduction.
 
 The PR remains a research preview until real Japanese E5 corpora pass the full
 acceptance matrix, especially literal sentence split/merge tolerance within

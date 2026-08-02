@@ -1,4 +1,4 @@
-# v0.6 validation matrix
+# v0.7 validation matrix
 
 The code-level tests below validate implementation behavior. They are not a
 substitute for a confirmatory Japanese multilingual-E5 corpus.
@@ -47,12 +47,24 @@ substitute for a confirmatory Japanese multilingual-E5 corpus.
 | adopted-cause replacement | causal graph and responsibility category update | passed |
 | editorial/promotion split | first offer sentence is excluded from content re-encoding | passed |
 | persuasion seed | same seed reproduces the exact milestone null | passed |
+| title exclusion scope | `Xではない` and `Xだけではない` produce different mismatch values | passed on deterministic contrast |
+| annotated scope Macro-F1 | requires frozen independent title/body labels | pending |
+| desire hierarchy | surface, intermediate, and deep frames retain source spans | passed on registered constructions |
+| competing-cause retention | at least three active cause types remain visible in the synthetic article | passed |
+| cause deletion | multi-cause score falls by at least 30% while desire depth is unchanged | passed |
+| causal two-layer order | vocabulary-preserving causal reversal lowers bridge score by at least 30% | passed |
+| OS role transition | at least four roles are recovered; fixed-role replacement lowers the score | passed on registered constructions |
+| Transformation operationality | vague change language lowers operationality by at least 30% | passed |
+| autonomy separation | adding reasons and trade-offs raises autonomy above subjective ownership alone | passed |
+| recursive cycle | deleting New Shadow changes the classification to stepwise | passed |
+| v0.7 evidence localization | every positive frame retains sentence text and index/provenance | passed |
 | current-sentence exclusion | new causal state omits \(x_t\) and improves the synthetic gap | passed |
 | evidence localization | sentence map identifies history and turning evidence | passed |
-| report bundle | JSON, twenty-four CSV diagnostics, Markdown, and PDF generated | passed |
+| report bundle | JSON, thirty-four CSV diagnostics, Markdown, and PDF generated | passed |
 | Japanese semantic-role model | requires frozen model and annotated corpus | pending |
 | frozen autoregressive direction model | requires model revision and corpus freeze | pending |
 | Japanese persuasion corpus | requires frozen annotations for cause, evidence, metaphor, modality, and offer boundaries | pending |
+| Japanese deep-reframing corpus | requires frozen annotations for desire depth, cause competition, and transformation | pending |
 
 Operational status remains **research preview** while literal split/merge
 tolerance, real-corpus E5 stability, and semantic-role validation are pending.

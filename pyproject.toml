@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "atct-narrative-fingerprint"
-version = "0.6.0"
-description = "A falsifiable checker for content and persuasion structure"
+version = "0.7.0"
+description = "A falsifiable checker for narrative, persuasion, and semantic structure"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

@@ -1,4 +1,4 @@
-"""ATCT Narrative Fingerprint v0.6 content and persuasion evidence."""
+"""ATCT Narrative Fingerprint v0.7 multi-channel structural evidence."""
 
 from __future__ import annotations
 
@@ -56,6 +56,10 @@ from .segmentation import (
     paragraph_indices,
     section_graph as build_section_graph,
     segment_diversity,
+)
+from .semantic_structure import (
+    SemanticStructureAnalysis,
+    analyze_semantic_structure,
 )
 
 DEFAULT_WINDOWS = (3, 5, 8, 13)
@@ -150,6 +154,7 @@ class FingerprintResult:
     claim_scope_audit: ClaimScopeAudit
     relational_analysis: RelationalAnalysis
     persuasion_analysis: PersuasionAnalysis
+    semantic_structure_analysis: SemanticStructureAnalysis
     motif_function_analysis: MotifFunctionAnalysis
     closure_analysis: ClosureAnalysis
     discourse_units: tuple[DiscourseUnit, ...]
@@ -344,6 +349,7 @@ def compute_fingerprint(
     document_structure: Mapping[str, object] | None = None,
     content_vectors: np.ndarray | None = None,
     content_indices: Sequence[int] | None = None,
+    document_title: str = "",
 ) -> FingerprintResult:
     """Measure history-conditioned coherence against order null models."""
 
@@ -522,6 +528,10 @@ def compute_fingerprint(
         shuffle_count=shuffle_count,
         seed=seed,
     )
+    semantic_structure = analyze_semantic_structure(
+        sentences,
+        title=document_title,
+    )
     closure = analyze_closure(sentences)
     changes = history_change(states)
     effective_sections = tuple(
@@ -613,6 +623,46 @@ def compute_fingerprint(
         metaphor_by_sentence.setdefault(item.sentence_index, []).append(
             f"{item.metaphor}:{item.stage}"
         )
+    desire_by_sentence: dict[int, list[str]] = {}
+    for item in semantic_structure.desires.frames:
+        desire_by_sentence.setdefault(item.sentence_index, []).append(
+            f"{item.depth}:{item.polarity}:{item.action}"
+        )
+    v07_causes_by_sentence: dict[int, list[str]] = {}
+    for item in semantic_structure.cause_candidates.candidates:
+        for sentence_index in item.sentence_indices:
+            v07_causes_by_sentence.setdefault(sentence_index, []).append(
+                f"{item.cause_type}:{item.status}"
+            )
+    v07_metaphors_by_sentence: dict[int, list[str]] = {}
+    for item in semantic_structure.metaphor_roles.roles:
+        v07_metaphors_by_sentence.setdefault(item.section_index, []).append(
+            f"{item.label}:{item.role}"
+        )
+    causal_layers_by_sentence: dict[int, list[str]] = {}
+    for item in semantic_structure.causal_layers.events:
+        causal_layers_by_sentence.setdefault(item.sentence_index, []).append(
+            item.role
+        )
+    autonomy_by_sentence: dict[int, list[str]] = {}
+    for item in semantic_structure.autonomy.conditions:
+        if item.sentence_index is not None:
+            autonomy_by_sentence.setdefault(item.sentence_index, []).append(
+                item.name
+            )
+    recursive_by_sentence: dict[int, list[str]] = {}
+    for item in semantic_structure.recursive_cycle.criteria:
+        if item.sentence_index is not None:
+            recursive_by_sentence.setdefault(item.sentence_index, []).append(
+                item.name
+            )
+    semantic_discourse_by_sentence = {
+        item.sentence_index: item.role
+        for item in semantic_structure.discourse_roles
+    }
+    transformation_indices = set(
+        semantic_structure.transformation.sentence_indices
+    )
     raw_sentence_rows = tuple(
         {
             "index": index,
@@ -681,6 +731,28 @@ def compute_fingerprint(
             "claim_certainty": modality_by_sentence[index].certainty,
             "metaphor_claims": "; ".join(
                 metaphor_by_sentence.get(index, [])
+            ),
+            "desire_frames": "; ".join(
+                desire_by_sentence.get(index, [])
+            ),
+            "v07_cause_candidates": "; ".join(
+                v07_causes_by_sentence.get(index, [])
+            ),
+            "v07_metaphor_roles": "; ".join(
+                v07_metaphors_by_sentence.get(index, [])
+            ),
+            "causal_layer_roles": "; ".join(
+                causal_layers_by_sentence.get(index, [])
+            ),
+            "transformation_evidence": index in transformation_indices,
+            "autonomy_conditions": "; ".join(
+                autonomy_by_sentence.get(index, [])
+            ),
+            "recursive_cycle_roles": "; ".join(
+                recursive_by_sentence.get(index, [])
+            ),
+            "semantic_discourse_role": semantic_discourse_by_sentence.get(
+                index, ""
             ),
             "role": _sentence_role(
                 index, float(sentence_z[index]), float(turn_sentence_z[index]), motifs
@@ -764,6 +836,39 @@ def compute_fingerprint(
                 "severity": persuasion.modality.unsupported_scope_expansion,
             }
         )
+    if semantic_structure.title_body_scope.mismatch >= 0.50:
+        risks.append(
+            {
+                "risk": "title_body_scope_mismatch",
+                "severity": semantic_structure.title_body_scope.mismatch,
+                "evidence": [
+                    item.to_dict()
+                    for item in semantic_structure.title_body_scope.evidence_spans
+                ],
+            }
+        )
+    if semantic_structure.cause_competition.warning:
+        risks.append(
+            {
+                "risk": semantic_structure.cause_competition.warning,
+                "severity": semantic_structure.cause_competition.cause_monopoly,
+                "evidence": list(
+                    semantic_structure.cause_competition.evidence_spans
+                ),
+            }
+        )
+    if semantic_structure.metaphor_roles.warning:
+        risks.append(
+            {
+                "risk": semantic_structure.metaphor_roles.warning,
+                "severity": (
+                    semantic_structure.metaphor_roles.overcompression_score
+                ),
+                "values": list(
+                    semantic_structure.metaphor_roles.compressed_values
+                ),
+            }
+        )
     lexical_structure = _structure_type(
         order_z=order_z,
         reverse_directionality=reverse_directionality,
@@ -782,6 +887,9 @@ def compute_fingerprint(
         motif_functions,
         closure,
     )
+    structure = tuple(
+        dict.fromkeys((*structure, *semantic_structure.document_types))
+    )
     discourse_units = build_discourse_units(
         sentences,
         paragraphs,
@@ -789,7 +897,7 @@ def compute_fingerprint(
     )
 
     return FingerprintResult(
-        version="0.6.0",
+        version="0.7.0",
         sentence_count=len(sentences),
         primary_metric="Z_content + Z_persuasion",
         primary_window=primary_window,
@@ -820,6 +928,7 @@ def compute_fingerprint(
         claim_scope_audit=claim_scope,
         relational_analysis=relations,
         persuasion_analysis=persuasion,
+        semantic_structure_analysis=semantic_structure,
         motif_function_analysis=motif_functions,
         closure_analysis=closure,
         discourse_units=discourse_units,
@@ -836,9 +945,11 @@ def compute_fingerprint(
             "Z_content and Z_persuasion are separate order-evidence channels. "
             "Z_content is the unadjusted maximum of the preregistered lexical "
             "and relational content Z values and requires corpus calibration. "
-            "Responsibility relief, emotional sequence, and funnel structure "
-            "are descriptive and do not prove manipulation, truth, authorship, "
-            "or writing quality."
+            "Responsibility relief, emotional sequence, funnel structure, "
+            "desire depth, and causal candidates are descriptive. They do not "
+            "prove manipulation, a true psychological cause, truth, authorship, "
+            "or writing quality. The v0.7 component index is rule coverage, and "
+            "Macro-F1 remains pending a frozen annotated corpus."
         ),
     )
 
@@ -861,6 +972,14 @@ def analyze_text(
         paragraphs = [list(block) for block in parsed.paragraph_indices]
         sections = parsed.sections
         structure_payload = parsed.to_dict()
+        document_title = next(
+            (
+                block.text
+                for block in parsed.blocks
+                if block.kind == "heading" and block.level == 1
+            ),
+            "",
+        )
     else:
         sentences = split_sentences(text)
         paragraphs = paragraph_indices(text, split_sentences)
@@ -883,6 +1002,7 @@ def analyze_text(
                 "structure": 0,
             },
         }
+        document_title = ""
     selected_encoder = encoder or TfidfSentenceEncoder()
     vectors = selected_encoder.encode(sentences)
     layer_preview = analyze_document_layers(sentences)
@@ -909,4 +1029,5 @@ def analyze_text(
         document_structure=structure_payload,
         content_vectors=content_vectors,
         content_indices=content_indices,
+        document_title=document_title,
     )
