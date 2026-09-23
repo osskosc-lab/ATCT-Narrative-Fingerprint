@@ -35,7 +35,11 @@ _CAUSE_RULES: tuple[tuple[CauseType, str, re.Pattern[str]], ...] = (
         ),
     ),
     ("income", "賃金・収入", re.compile(r"賃金|収入|給与|給料|報酬")),
-    ("health", "健康", re.compile(r"健康|体調|睡眠|病気|心身|疲労")),
+    (
+        "health",
+        "健康",
+        re.compile(r"健康|体調|睡眠|病気|身心|疲労|身体が(?:落ち|先に)|体調不良"),
+    ),
     (
         "relationship",
         "人間関係",
@@ -64,123 +68,9 @@ _SUPPORTED = re.compile(
     r"原因|理由|ため|によって|影響|制約|不一致|重要|関係する|左右する|"
     r"変える|可能にする|無視できない|もある|も含む"
 )
+_LISTISH = re.compile(r"(?:も[、,]).{0,24}も")
+_ENUMERATION = re.compile(r"三つに分け|理由は(?:、)?だいたい三|一つ目は")
 _OUTCOME = re.compile(
-    r"([^。！？]{1,50}?(?:転職したい|働き方を変えたい|苦しい|"
+    r"([。！？]{1,50}?(?:転職したい|働き方を変えたい|苦しい|"
     r"合わない|続けられない|辞めたい|違和感))"
 )
-
-
-@dataclass(frozen=True)
-class CauseCandidate:
-    outcome: str
-    cause_type: CauseType
-    description: str
-    status: CauseStatus
-    evidence_spans: tuple[str, ...]
-    sentence_indices: tuple[int, ...]
-    confidence: float
-    rule_or_model: str = "rule"
-
-    def to_dict(self) -> dict[str, object]:
-        return asdict(self)
-
-
-@dataclass(frozen=True)
-class CauseCandidateAnalysis:
-    outcome: str
-    candidates: tuple[CauseCandidate, ...]
-    supported_count: int
-    possible_count: int
-    rejected_count: int
-    not_examined_count: int
-
-    def to_dict(self) -> dict[str, object]:
-        return asdict(self)
-
-
-def analyze_cause_candidates(sentences: Sequence[str]) -> CauseCandidateAnalysis:
-    """Keep absent real-world causes visible without pretending they are supported."""
-
-    outcome = ""
-    for sentence in sentences:
-        match = _OUTCOME.search(sentence)
-        if match:
-            outcome = match.group(1).strip(" 、，,")
-            break
-    outcome = outcome or "本文の表面問題"
-
-    candidates: list[CauseCandidate] = []
-    for cause_type, description, pattern in _CAUSE_RULES:
-        records: list[tuple[int, str]] = []
-        statuses: list[CauseStatus] = []
-        for index, sentence in enumerate(sentences):
-            if not pattern.search(sentence):
-                continue
-            records.append((index, sentence))
-            if _NONEXCLUSIVE.search(sentence):
-                statuses.append("possible")
-            elif _REJECTED.search(sentence):
-                statuses.append("rejected")
-            elif _POSSIBLE.search(sentence):
-                statuses.append("possible")
-            elif _SUPPORTED.search(sentence):
-                statuses.append("supported")
-            else:
-                statuses.append("possible")
-        if not records:
-            status: CauseStatus = "not_examined"
-            confidence = 0.0
-        elif "supported" in statuses:
-            status = "supported"
-            confidence = min(1.0, 0.72 + 0.10 * len(records))
-        elif "possible" in statuses:
-            status = "possible"
-            confidence = min(0.78, 0.48 + 0.08 * len(records))
-        else:
-            status = "rejected"
-            confidence = min(0.90, 0.65 + 0.08 * len(records))
-        candidates.append(
-            CauseCandidate(
-                outcome=outcome,
-                cause_type=cause_type,
-                description=description,
-                status=status,
-                evidence_spans=tuple(item[1] for item in records),
-                sentence_indices=tuple(item[0] for item in records),
-                confidence=confidence,
-            )
-        )
-
-    known_matches = [
-        pattern
-        for _, _, pattern in _CAUSE_RULES
-        if any(pattern.search(sentence) for sentence in sentences)
-    ]
-    unknown_records: list[tuple[int, str]] = []
-    cause_cue = re.compile(r"原因(?:は|が)|理由(?:は|が)|一因")
-    for index, sentence in enumerate(sentences):
-        if cause_cue.search(sentence) and not any(
-            pattern.search(sentence) for pattern in known_matches
-        ):
-            unknown_records.append((index, sentence))
-    if unknown_records:
-        candidates.append(
-            CauseCandidate(
-                outcome=outcome,
-                cause_type="unknown",
-                description="未分類の原因",
-                status="possible",
-                evidence_spans=tuple(item[1] for item in unknown_records),
-                sentence_indices=tuple(item[0] for item in unknown_records),
-                confidence=0.45,
-            )
-        )
-
-    return CauseCandidateAnalysis(
-        outcome=outcome,
-        candidates=tuple(candidates),
-        supported_count=sum(item.status == "supported" for item in candidates),
-        possible_count=sum(item.status == "possible" for item in candidates),
-        rejected_count=sum(item.status == "rejected" for item in candidates),
-        not_examined_count=sum(item.status == "not_examined" for item in candidates),
-    )
