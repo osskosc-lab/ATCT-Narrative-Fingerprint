@@ -57,6 +57,14 @@ def analyze_cause_competition(
         item.description for item in active if item is not primary
     )
     exclusive = monopoly >= 0.85 and len(active) == 1
+    supported_active = [item for item in active if item.status == "supported"]
+    weak_unknown_only = primary.cause_type == "unknown" and not supported_active
+    overcompression = (
+        not weak_unknown_only
+        and len(active) < 3
+        and monopoly >= 0.50
+        and primary.confidence >= 0.55
+    )
     return CauseCompetition(
         primary_cause_type=primary.cause_type,
         primary_interpretation=primary.description,
@@ -65,11 +73,7 @@ def analyze_cause_competition(
         competing_causes=competing,
         retained_cause_types=tuple(item.cause_type for item in active),
         cause_monopoly=float(monopoly),
-        warning=(
-            "single_cause_overcompression"
-            if monopoly >= 0.70 or len(active) < 3
-            else ""
-        ),
+        warning="single_cause_overcompression" if overcompression else "",
         evidence_spans=tuple(
             span
             for item in active
