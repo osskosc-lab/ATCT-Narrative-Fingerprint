@@ -1,3 +1,383 @@
-# ATCT Narrative Fingerprint
+# ATCT Narrative Fingerprint v0.7
 
-Repository initialized. The first implementation is being prepared through a draft pull request.
+**文章がどのような履歴依存構造で生成されたかを測るチェッカー**
+
+The v0.7 research question is:
+
+> Which deeper desire or cause does a document propose, and does that
+> interpretation preserve competing real-world causes instead of erasing
+> them?
+
+The report keeps order, persuasion, and semantic-interpretation evidence
+separate:
+
+| Channel | Primary evidence |
+|---|---|
+| `Z_content` | strongest preregistered content-order channel after promotional-tail exclusion |
+| `Z_persuasion` | ordered persuasion milestones versus shuffled milestone positions |
+| v0.7 semantic components | desire depth, exclusion scope, cause competition, causal layers, transformation, autonomy, metaphor roles, and recurrence |
+
+The component values behind `Z_content` remain visible as `Z_lexical` and
+`Z_relational`; they are not averaged into a writing-quality score.
+
+The lexical primary metric remains:
+
+\[
+Z_{\mathrm{order}} =
+\frac{
+C_{\mathrm{original}}-\mu(C_{\mathrm{random}})
+}{
+\sigma(C_{\mathrm{random}})+\varepsilon
+}
+\]
+
+where the state used to evaluate sentence \(x_t\) is built only from preceding
+sentences:
+
+\[
+h_t^{(w)} =
+\frac{\sum_{j=1}^{w}\alpha_j x_{t-j}}
+{\sum_{j=1}^{w}\alpha_j},
+\qquad
+C_t^{(w)}=\cos(x_t,h_t^{(w)}).
+\]
+
+The current sentence is never included in its own history state. v0.5 adds a
+second, independent relation-history metric:
+
+\[
+Z_{\mathrm{relational}}
+=
+\frac{
+R_{\mathrm{original}}-\mu(R_{\mathrm{frame\ shuffle}})
+}{
+\sigma(R_{\mathrm{frame\ shuffle}})+\varepsilon
+}.
+\]
+
+`Z_lexical` asks whether sentence meaning depends on order. `Z_relational`
+asks whether subject-predicate-target transformations depend on order.
+
+## Interpretation boundary
+
+This is not an AI-authorship detector, probability, or writing-quality score.
+It reports statistical evidence and locations for order-conditioned narrative
+structure. The former fixed 0–100 aggregate display score has been removed.
+
+| `Z_order` | Descriptive interpretation |
+|---:|---|
+| `< 1` | weak evidence |
+| `1–2` | limited order dependence |
+| `2–3` | clear order dependence |
+| `≥ 3` | very strong order dependence |
+
+The threshold is a research convention, not a universal calibration. The
+v0.7 component index is a 0–1 rule-coverage summary and is likewise not a
+quality score or a calibrated probability.
+
+## v0.7 changes
+
+v0.7 separates an asserted desire into:
+
+\[
+\text{surface action}\rightarrow\text{intermediate purpose}\rightarrow
+\text{deep value}.
+\]
+
+It then audits whether that deeper interpretation has become an exclusive
+claim. In particular, the Phase-1 baseline distinguishes `Xではない` from
+`Xだけではない`, compares a Markdown title with body scope, and keeps the
+supporting title/body spans.
+
+The semantic-structure channel also:
+
+- retains value conflict, work environment, income, health, relationship,
+  job fit, family constraint, and social norm as supported, possible,
+  rejected, or explicitly `not_examined` candidates;
+- reports cause monopoly and `single_cause_overcompression` without inventing
+  support for absent causes;
+- tests the ordered bridge institution → exploration possibility → individual
+  agency → meaning reconstruction;
+- tracks OS as social standard, internalized rule, reality mismatch, error
+  detector, rewrite target, and self-revision system;
+- separates a changed variable, initial state, changed state, observable
+  marker, and re-change condition;
+- separates subjective ownership from reason explanation, trade-off
+  awareness, alternative comparison, revisability, and external/self criteria;
+- requires an explicit New Shadow before classifying a recursive
+  Shadow–Seeking–Transformation cycle;
+- attaches an evidence span and `rule_or_model` provenance to every extracted
+  frame.
+
+The target Phase-1 Macro-F1 is not reported yet: it requires a frozen,
+independently annotated title/body scope corpus. See
+[`docs/V07_IMPLEMENTATION_NOTES.md`](docs/V07_IMPLEMENTATION_NOTES.md).
+
+## v0.6 changes
+
+Each sentence receives a reader-transformation frame:
+
+```text
+(reader_state, cause_role, emotion_role, solution_role, offer_role,
+ modality, evidence_type)
+```
+
+The new audit reports:
+
+- rejected and adopted causes as a causal-substitution graph;
+- responsibility movement from personality to state, method, or environment;
+- evidence types without treating analogy or testimony as experiment;
+- asserted stage order, its alignment with earlier stage mentions, and six
+  missing-order-evidence checks;
+- explanatory metaphor, mapping claim, and causal reification separately;
+- personal-to-universal subject-scope expansion and unsupported certainty
+  escalation;
+- pain, relief, cause replacement, solution, branded solution, and offer as an
+  ordered persuasion null model;
+- the transition from generic guidance to a named framework;
+- editorial, testimony, framework, summary, lead-magnet, cross-promotion,
+  follow, social-proof, backlink, and hashtag layers.
+
+`lead_magnet` and later promotional layers are excluded when `Z_content` is
+encoded, while remaining available to `Z_persuasion`. See
+[`docs/V06_IMPLEMENTATION_NOTES.md`](docs/V06_IMPLEMENTATION_NOTES.md).
+
+## v0.5 changes
+
+Each detected clause is represented as a transparent relation frame containing
+subject, predicate, predicate family, target, polarity, tense, modality,
+execution intensity, and motif evidence. The relation channel reports:
+
+- self/other target asymmetry within each predicate family;
+- ordered relation flips such as other-directed execution followed by
+  self-directed avoidance;
+- `Z_relational` against shuffled relation-frame positions;
+- a lexical/relational four-quadrant diagnosis;
+- same-object role changes and different-object/same-function motif clusters;
+- recognition, execution, deferment, openness, and recognition-action distance;
+- `relational_mirror`, `role_transforming_cycle`, and
+  `deferred_self_judgment` structure labels.
+
+The current extractor is a deterministic Japanese CI baseline, not a complete
+semantic-role or coreference model. Every frame retains its source clause for
+inspection. See [`docs/V05_IMPLEMENTATION_NOTES.md`](docs/V05_IMPLEMENTATION_NOTES.md).
+
+## v0.4 changes
+
+Markdown input is separated before semantic analysis:
+
+\[
+\text{prose layer}\oplus\text{equation layer}\oplus\text{structure layer}.
+\]
+
+Headings, equations, quotes, lists, tables, and thematic breaks are preserved
+as metadata instead of being counted as ordinary prose sentences. Equations
+are tagged with roles such as definition, hypothesis, falsification, theorem,
+or conclusion.
+
+Order interventions now distinguish adjacent swaps, within-paragraph
+shuffles, 3–5-sentence blocks, paragraph order, section order, full random
+order, and reversal. A section graph records macro transitions.
+
+Direction is no longer inferred from a symmetric embedding distance alone.
+The lightweight CI baseline compares character-ngram conditional likelihood
+under preceding versus following context. This is an asymmetric lexical
+baseline; confirmatory semantic direction claims require a frozen
+autoregressive model.
+
+Long-history gain is measured on held-out future sentences with rolling-origin
+ridge prediction:
+
+\[
+G_{\mathrm{long}} =
+E_{\mathrm{short}}^{\mathrm{test}}-
+E_{\mathrm{long}}^{\mathrm{test}}.
+\]
+
+Explicit boundary statements such as "this is a metaphor" or "does not prove"
+are recorded as `Licensed Jump` evidence and are not automatically reported as
+unexplained logical leaps.
+
+The v0.4 explanation layer adds four evidence-retrieval diagnostics:
+
+- **Motif Role Transition** follows a repeated phrase across sentence contexts
+  and separates stable reuse from a distant return with changed context;
+- **Concept Branch** retrieves explicit contrasts and alternatives such as
+  `not ... but` and `それとも`;
+- **Question–Answer Closure** ranks candidate ending statements against
+  opening questions;
+- **Claim Scope Audit** flags a qualified premise that is followed by a related
+  categorical assertion without the original qualifier.
+
+Every diagnostic returns sentence indices, original text, and matching
+evidence. These are heuristic inspection aids, not proof of authorial intent,
+logical validity, or literary quality. `Z_order` remains the only primary gate.
+
+## Outputs
+
+### Structure strength
+
+- content-only `Z_content`;
+- milestone-order `Z_persuasion`;
+- random-shuffle `Z_order`;
+- adjacent, paragraph-internal, block, paragraph-order, section-order, random,
+  and reverse controls;
+- asymmetric conditional directionality;
+- rolling-origin long-history predictive gain;
+- normalized turning-point Z.
+
+### Structure type
+
+- `linear`;
+- `circular`;
+- `open_spiral`;
+- `stepwise`;
+- `branching`;
+- `repetitive`;
+- `mosaic`;
+- `weak_or_mixed`.
+
+### Explanation and editing risks
+
+- one row per sentence with \(C_t\), history Z, history-state change, curvature,
+  turning Z, held-out long-history gain, direction delta, section, Licensed
+  Jump status, and structural role;
+- Markdown layer inventory and section-transition graph;
+- transformed motif returns separated from exact copied meaning;
+- repeated-motif context changes, explicit conceptual branches, opening
+  question/ending answer candidates, and claim-scope warnings;
+- theme cohesion separated from between-segment diversity;
+- short-sentence rate, length variance, lexical diversity, and technical-term
+  density;
+- explicit risk locations for duplication, topic deviation, unexplained
+  transitions, short-sentence concentration, and opening/body mismatch.
+- source-localized cause replacement, responsibility shift, evidence type,
+  stage-order support, metaphor reification, modality escalation, document
+  layer, and persuasion-funnel records.
+- source-localized desire depth, title/body scope, competing causes,
+  institution/individual causal layers, metaphor roles, transformation
+  operationality, autonomy conditions, and recursive-cycle evidence.
+
+## Encoder roles
+
+| Use | Encoder |
+|---|---|
+| CI and unit tests | TF-IDF |
+| fast lexical smoke checks | TF-IDF |
+| Japanese production analysis | multilingual-E5 |
+| motif analysis | multilingual-E5 |
+| lexical repetition | TF-IDF |
+| comparative study | `--encoder both` |
+
+TF-IDF and E5 are separate analysis channels. TF-IDF smoke output must not be
+treated as a substitute for semantic production analysis.
+
+## Install
+
+```bash
+python -m pip install -e .
+```
+
+For multilingual E5:
+
+```bash
+python -m pip install -e ".[semantic]"
+```
+
+## Analyze and create a report bundle
+
+```bash
+atct-fingerprint analyze article.txt \
+  --encoder e5 \
+  --shuffles 200 \
+  --controls local,paragraph_inner,block,paragraph_order,section_order,random,reverse \
+  --sentence-map \
+  --motif-analysis \
+  --output reports/article
+```
+
+Generated files:
+
+```text
+reports/article/
+├── fingerprint.json
+├── sentence_map.csv
+├── turning_points.csv
+├── motif_pairs.csv
+├── motif_role_transitions.csv
+├── concept_branches.csv
+├── qa_closure.csv
+├── claim_scope_audit.csv
+├── relations.csv
+├── target_asymmetry.csv
+├── relation_flips.csv
+├── motif_functions.csv
+├── closure_states.csv
+├── discourse_units.csv
+├── causal_substitutions.csv
+├── responsibility_shifts.csv
+├── evidence_types.csv
+├── sequence_audit.csv
+├── metaphor_audit.csv
+├── modality_history.csv
+├── persuasion_events.csv
+├── document_layers.csv
+├── funnel.csv
+├── desire_frames.csv
+├── cause_candidates_v07.csv
+├── cause_competition.csv
+├── metaphor_roles_v07.csv
+├── causal_layers.csv
+├── transformation_v07.csv
+├── autonomy_v07.csv
+├── title_body_scope.csv
+├── recursive_cycles.csv
+├── v07_components.csv
+├── section_graph.csv
+├── document_blocks.csv
+├── report.md
+└── report.pdf
+```
+
+The PDF is a portable summary. Japanese sentence-level evidence remains in the
+UTF-8 JSON, CSV, and Markdown outputs.
+
+## Secondary unknown-model benchmark
+
+The v0.1 AUROC experiment remains available as a secondary benchmark:
+
+```bash
+atct-fingerprint evaluate data/confirmatory.csv --encoder e5
+```
+
+It rejects AI-source overlap and normalized duplicate documents between train
+and test. This benchmark does not replace the document-level content and
+persuasion intervention protocol.
+
+## Validation status
+
+The implementation includes 66 deterministic tests. They cover
+current-sentence exclusion, Markdown layer separation, hierarchical order
+controls, reversal of the asymmetric direction score, rolling prediction
+without future-target leakage, 30-seed sign stability, shuffled-chain
+falsification, motif deletion, exact-copy rejection, Licensed Jump handling,
+motif role shifts, contrastive branches, question–answer closure, claim-scope
+drift, target-label reversal, relation destruction, predicate paraphrase,
+functional-motif replacement, closure completion, and report generation.
+v0.6 additionally tests stage reversal, offer deletion, brand-name removal,
+testimony deletion, modality hedging, metaphor concretization, adopted-cause
+replacement, promotional-layer exclusion, and same-seed persuasion nulls.
+v0.7 additionally tests exclusive/nonexclusive title swapping, competing-cause
+deletion, fixed-role metaphor replacement, vague Transformation replacement,
+autonomy evidence addition, New Shadow deletion, vocabulary-preserving causal
+reversal, Markdown-title integration, and exact deterministic reproduction.
+
+The PR remains a research preview until real Japanese E5 corpora pass the full
+acceptance matrix, especially literal sentence split/merge tolerance within
+10%. See [`docs/VALIDATION_MATRIX.md`](docs/VALIDATION_MATRIX.md).
+
+## Development
+
+```bash
+python -m unittest discover -s tests -v
+```

@@ -1,0 +1,643 @@
+"""Portable JSON, CSV, Markdown, and summary-PDF report output."""
+
+from __future__ import annotations
+
+import csv
+from dataclasses import asdict
+import json
+from pathlib import Path
+from typing import Mapping
+
+from .features import FingerprintResult
+from .reporting_v06 import write_v06_tables
+from .reporting_v07 import write_v07_tables
+
+
+def _pdf_escape(value: str) -> str:
+    return (
+        value.encode("ascii", "replace")
+        .decode("ascii")
+        .replace("\\", "\\\\")
+        .replace("(", "\\(")
+        .replace(")", "\\)")
+    )
+
+
+def _write_summary_pdf(path: Path, result: FingerprintResult) -> None:
+    """Write a dependency-free, ASCII summary PDF."""
+
+    lines = [
+        "ATCT Narrative Fingerprint v0.7",
+        f"Content order: Z_content = {result.content_z:.4f}",
+        f"Persuasion order: Z_persuasion = {result.persuasion_z:.4f}",
+        f"Content/persuasion quadrant: {result.persuasion_analysis.quadrant}",
+        f"Lexical order: Z_lexical = {result.lexical_order_z:.4f}",
+        f"Relational order: Z_relational = {result.relational_order_z:.4f}",
+        f"Quadrant: {result.relational_analysis.quadrant}",
+        f"Gate: {result.gate}",
+        f"Sentences: {result.sentence_count}",
+        f"Primary history window: {result.primary_window}",
+        f"Original consistency: {result.original_consistency:.4f}",
+        f"Directional asymmetry: {result.reverse_directionality:.4f}",
+        f"Direction method: {result.directionality.method}",
+        f"Rolling long-history gain: {result.long_history_gain:.4f}",
+        f"Rolling test samples: {result.long_history_prediction.test_samples}",
+        f"Turning-point Z: {result.turning_point_z:.4f}",
+        f"Theme cohesion: {result.theme_cohesion:.4f}",
+        f"Segment diversity: {result.segment_diversity:.4f}",
+        f"Structure type: {', '.join(result.structure_type)}",
+        f"Target asymmetries: {len(result.relational_analysis.target_asymmetries)}",
+        f"Relation flips: {len(result.relational_analysis.relation_flips)}",
+        f"Closure state: {result.closure_analysis.primary_state}",
+        f"Recognition-action distance: {result.closure_analysis.action_distance:.4f}",
+        (
+            "Motif role-shift returns: "
+            f"{result.motif_role_analysis.transformed_return_count}"
+        ),
+        f"Concept branches: {len(result.concept_branches)}",
+        f"Q-A closure score: {result.qa_closure.best_score:.4f}",
+        f"Claim-scope warnings: {len(result.claim_scope_audit.findings)}",
+        (
+            "Title/body scope mismatch: "
+            f"{result.semantic_structure_analysis.title_body_scope.mismatch:.4f}"
+        ),
+        (
+            "Deep reframing evidence: "
+            f"{result.semantic_structure_analysis.deep_redefinition_score:.4f}"
+        ),
+        (
+            "Multi-cause bridge: "
+            f"{result.semantic_structure_analysis.multi_cause_score:.4f}"
+        ),
+        (
+            "Transformation completeness: "
+            f"{result.semantic_structure_analysis.transformation_completeness:.4f}"
+        ),
+        "",
+        "Controls:",
+    ]
+    for name, summary in result.controls.items():
+        z_text = "n/a" if summary.z is None else f"{summary.z:.4f}"
+        lines.append(
+            f"  {name}: mean={summary.null_mean:.4f}, "
+            f"effect={summary.effect:.4f}, z={z_text}"
+        )
+    lines.extend(
+        [
+            "",
+            "Interpretation boundary:",
+            "Structural evidence only; not authorship probability or quality score.",
+            "See report.md and UTF-8 CSV files for sentence-level Japanese text.",
+        ]
+    )
+    commands = ["BT", "/F1 10 Tf", "50 790 Td"]
+    for line in lines[:48]:
+        commands.append(f"({_pdf_escape(line)}) Tj")
+        commands.append("0 -14 Td")
+    commands.append("ET")
+    stream = "\n".join(commands).encode("ascii")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        (
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
+            b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>"
+        ),
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length "
+        + str(len(stream)).encode("ascii")
+        + b" >>\nstream\n"
+        + stream
+        + b"\nendstream",
+    ]
+    document = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = [0]
+    for number, obj in enumerate(objects, start=1):
+        offsets.append(len(document))
+        document.extend(f"{number} 0 obj\n".encode("ascii"))
+        document.extend(obj)
+        document.extend(b"\nendobj\n")
+    xref = len(document)
+    document.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    document.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        document.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    document.extend(
+        (
+            f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+            f"startxref\n{xref}\n%%EOF\n"
+        ).encode("ascii")
+    )
+    path.write_bytes(document)
+
+
+def write_report_bundle(
+    result: FingerprintResult,
+    output_dir: str | Path,
+    *,
+    fingerprint_payload: Mapping[str, object] | None = None,
+) -> dict[str, str]:
+    """Write the complete v0.7 report bundle and return generated paths."""
+
+    destination = Path(output_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    payload = dict(fingerprint_payload or result.to_dict())
+
+    fingerprint_path = destination / "fingerprint.json"
+    fingerprint_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    sentence_path = destination / "sentence_map.csv"
+    sentence_fields = [
+        "index",
+        "sentence_number",
+        "text",
+        "section",
+        "history_consistency",
+        "history_z",
+        "history_change",
+        "curvature",
+        "turn_z",
+        "long_history_gain",
+        "direction_delta",
+        "motif_roles",
+        "concept_branch",
+        "qa_role",
+        "scope_warning",
+        "subjects",
+        "predicate_families",
+        "targets",
+        "modalities",
+        "relation_flip",
+        "motif_functions",
+        "closure_role",
+        "document_layer",
+        "persuasion_events",
+        "reader_state",
+        "cause_role",
+        "solution_role",
+        "offer_role",
+        "evidence_type",
+        "evidence_strength",
+        "claim_modality",
+        "claim_certainty",
+        "metaphor_claims",
+        "desire_frames",
+        "v07_cause_candidates",
+        "v07_metaphor_roles",
+        "causal_layer_roles",
+        "transformation_evidence",
+        "autonomy_conditions",
+        "recursive_cycle_roles",
+        "semantic_discourse_role",
+        "licensed_jump",
+        "role",
+    ]
+    with sentence_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=sentence_fields)
+        writer.writeheader()
+        writer.writerows(result.sentence_map)
+
+    turning_path = destination / "turning_points.csv"
+    turning_rows = sorted(
+        result.sentence_map,
+        key=lambda row: (
+            float("-inf") if row["turn_z"] is None else float(row["turn_z"])
+        ),
+        reverse=True,
+    )
+    with turning_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=sentence_fields)
+        writer.writeheader()
+        writer.writerows(turning_rows)
+
+    motif_path = destination / "motif_pairs.csv"
+    motif_fields = [
+        "first_index",
+        "second_index",
+        "first_sentence",
+        "second_sentence",
+        "similarity",
+        "relative_distance",
+        "kind",
+        "contribution",
+    ]
+    motif_rows = [
+        pair.to_dict()
+        for pair in (
+            *result.motif_analysis.motif_pairs,
+            *result.motif_analysis.duplicate_pairs,
+        )
+    ]
+    with motif_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=motif_fields)
+        writer.writeheader()
+        writer.writerows(motif_rows)
+
+    motif_role_path = destination / "motif_role_transitions.csv"
+    motif_role_fields = [
+        "motif",
+        "first_index",
+        "second_index",
+        "first_sentence",
+        "second_sentence",
+        "context_similarity",
+        "role_shift",
+        "relative_distance",
+        "kind",
+    ]
+    with motif_role_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=motif_role_fields)
+        writer.writeheader()
+        writer.writerows(
+            item.to_dict() for item in result.motif_role_analysis.transitions
+        )
+
+    branch_path = destination / "concept_branches.csv"
+    branch_fields = [
+        "sentence_index",
+        "paired_sentence_index",
+        "marker",
+        "left_branch",
+        "right_branch",
+        "lexical_similarity",
+        "lexical_divergence",
+    ]
+    with branch_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=branch_fields)
+        writer.writeheader()
+        writer.writerows(item.to_dict() for item in result.concept_branches)
+
+    qa_path = destination / "qa_closure.csv"
+    qa_fields = [
+        "question_index",
+        "answer_index",
+        "question",
+        "answer",
+        "semantic_similarity",
+        "lexical_overlap",
+        "answer_cue",
+        "score",
+        "kind",
+    ]
+    with qa_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=qa_fields)
+        writer.writeheader()
+        writer.writerows(item.to_dict() for item in result.qa_closure.pairs)
+
+    scope_path = destination / "claim_scope_audit.csv"
+    scope_fields = [
+        "qualifier_index",
+        "assertion_index",
+        "qualifier_sentence",
+        "assertion_sentence",
+        "shared_anchors",
+        "semantic_similarity",
+        "warning",
+    ]
+    with scope_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=scope_fields)
+        writer.writeheader()
+        writer.writerows(
+            item.to_dict() for item in result.claim_scope_audit.findings
+        )
+
+    relation_path = destination / "relations.csv"
+    relation_fields = [
+        "frame_index",
+        "sentence_index",
+        "clause_index",
+        "sentence",
+        "clause",
+        "subject",
+        "predicate",
+        "predicate_family",
+        "target",
+        "polarity",
+        "tense",
+        "modality",
+        "intensity",
+        "motifs",
+    ]
+    with relation_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=relation_fields)
+        writer.writeheader()
+        writer.writerows(
+            item.to_dict() for item in result.relational_analysis.frames
+        )
+
+    asymmetry_path = destination / "target_asymmetry.csv"
+    asymmetry_fields = [
+        "predicate_family",
+        "other_target_mean",
+        "self_target_mean",
+        "asymmetry",
+        "other_frame_indices",
+        "self_frame_indices",
+    ]
+    with asymmetry_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=asymmetry_fields)
+        writer.writeheader()
+        writer.writerows(
+            item.to_dict()
+            for item in result.relational_analysis.target_asymmetries
+        )
+
+    flip_path = destination / "relation_flips.csv"
+    flip_fields = [
+        "predicate_family",
+        "subject",
+        "first_frame_index",
+        "second_frame_index",
+        "first_sentence_index",
+        "second_sentence_index",
+        "first_target",
+        "second_target",
+        "intensity_contrast",
+        "temporal_distance",
+        "score",
+    ]
+    with flip_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=flip_fields)
+        writer.writeheader()
+        writer.writerows(
+            item.to_dict() for item in result.relational_analysis.relation_flips
+        )
+
+    motif_function_path = destination / "motif_functions.csv"
+    motif_function_fields = [
+        "sentence_index",
+        "motif",
+        "function",
+        "role",
+        "sentence",
+    ]
+    with motif_function_path.open(
+        "w", encoding="utf-8-sig", newline=""
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=motif_function_fields)
+        writer.writeheader()
+        writer.writerows(
+            item.to_dict()
+            for item in result.motif_function_analysis.occurrences
+        )
+
+    closure_path = destination / "closure_states.csv"
+    closure_fields = [
+        "recognition_score",
+        "execution_score",
+        "deferment_score",
+        "openness_score",
+        "action_distance",
+        "primary_state",
+        "states",
+        "recognition_indices",
+        "execution_indices",
+        "deferment_indices",
+    ]
+    with closure_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=closure_fields)
+        writer.writeheader()
+        writer.writerow(result.closure_analysis.to_dict())
+
+    discourse_path = destination / "discourse_units.csv"
+    discourse_fields = [
+        "unit_index",
+        "kind",
+        "role",
+        "sentence_indices",
+        "text",
+    ]
+    with discourse_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=discourse_fields)
+        writer.writeheader()
+        writer.writerows(item.to_dict() for item in result.discourse_units)
+
+    section_path = destination / "section_graph.csv"
+    section_fields = [
+        "source_id",
+        "target_id",
+        "source_heading",
+        "target_heading",
+        "transition_distance",
+        "target_history_support",
+        "relation",
+        "licensed_jump",
+    ]
+    with section_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=section_fields)
+        writer.writeheader()
+        writer.writerows(asdict(edge) for edge in result.section_graph.edges)
+
+    block_path = destination / "document_blocks.csv"
+    block_fields = [
+        "kind",
+        "text",
+        "start_line",
+        "end_line",
+        "section",
+        "level",
+        "role",
+    ]
+    block_rows = result.document_structure.get("blocks", [])
+    with block_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=block_fields)
+        writer.writeheader()
+        writer.writerows(block_rows)
+
+    v06_paths = write_v06_tables(result, destination)
+    v07_paths = write_v07_tables(result, destination)
+
+    report_path = destination / "report.md"
+    controls = "\n".join(
+        f"- {name}: effect={summary.effect:.4f}, "
+        f"Z={'n/a' if summary.z is None else f'{summary.z:.4f}'}"
+        for name, summary in result.controls.items()
+    )
+    semantic = result.semantic_structure_analysis
+    report_path.write_text(
+        "\n".join(
+            [
+                "# ATCT Narrative Fingerprint v0.7",
+                "",
+                f"- **Z_content:** {result.content_z:.4f}",
+                f"- **Z_persuasion:** {result.persuasion_z:.4f}",
+                f"- **内容／説得四象限:** {result.persuasion_analysis.quadrant}",
+                (
+                    f"- **Z_content方式:** "
+                    f"{result.persuasion_analysis.content_method}"
+                ),
+                f"- **Z_lexical:** {result.lexical_order_z:.4f}",
+                f"- **Z_relational:** {result.relational_order_z:.4f}",
+                f"- **四象限:** {result.relational_analysis.quadrant}",
+                f"- **判定:** {result.gate}",
+                f"- **構造型:** {', '.join(result.structure_type)}",
+                (
+                    f"- **対象非対称性:** "
+                    f"{len(result.relational_analysis.target_asymmetries)}系列"
+                ),
+                (
+                    f"- **関係反転:** "
+                    f"{len(result.relational_analysis.relation_flips)}候補"
+                ),
+                f"- **結末状態:** {result.closure_analysis.primary_state}",
+                (
+                    f"- **認識―行動距離:** "
+                    f"{result.closure_analysis.action_distance:.4f}"
+                ),
+                (
+                    f"- **方向性（{result.directionality.method}）:** "
+                    f"{result.reverse_directionality:.4f}"
+                ),
+                f"- **外部予測による長距離履歴利得:** {result.long_history_gain:.4f}",
+                (
+                    f"- **短期／長期テスト誤差:** "
+                    f"{result.long_history_prediction.short_test_error:.4f} / "
+                    f"{result.long_history_prediction.long_test_error:.4f}"
+                ),
+                f"- **転換点Z:** {result.turning_point_z:.4f}",
+                f"- **主題凝集度:** {result.theme_cohesion:.4f}",
+                f"- **構造的多様性:** {result.segment_diversity:.4f}",
+                (
+                    f"- **変形モチーフ帰還候補:** "
+                    f"{result.motif_role_analysis.transformed_return_count}"
+                ),
+                f"- **対立・選択分岐候補:** {len(result.concept_branches)}",
+                (
+                    f"- **Question–Answer Closure:** "
+                    f"{result.qa_closure.best_score:.4f} "
+                    f"({'matched' if result.qa_closure.closed else 'unmatched'})"
+                ),
+                (
+                    f"- **留保スコープ警告:** "
+                    f"{len(result.claim_scope_audit.findings)}"
+                ),
+                (
+                    f"- **原因置換:** "
+                    f"{len(result.persuasion_analysis.causal_frames.substitutions)}"
+                ),
+                (
+                    f"- **自己責任解除:** "
+                    f"{result.persuasion_analysis.responsibility.relief_score:.4f}"
+                ),
+                (
+                    f"- **順序必然性:** "
+                    f"{result.persuasion_analysis.sequence_audit.necessity_score:.4f}"
+                ),
+                (
+                    f"- **比喩実体化:** "
+                    f"{result.persuasion_analysis.metaphor_audit.reification_score:.4f}"
+                ),
+                (
+                    f"- **断定上昇警告:** "
+                    f"{result.persuasion_analysis.modality.unsupported_escalation:.4f}"
+                ),
+                (
+                    f"- **販売ファネル:** "
+                    f"{result.persuasion_analysis.funnel.funnel_score:.4f}"
+                ),
+                (
+                    f"- **本文終了／販促開始:** "
+                    f"{result.persuasion_analysis.document_layers.editorial_end_index}"
+                    " / "
+                    f"{result.persuasion_analysis.document_layers.promotion_start_index}"
+                ),
+                "",
+                "## v0.7 深層意味構造（構成要素を個別表示）",
+                "",
+                (
+                    f"- **表面欲求:** "
+                    f"{semantic.desires.surface_desire}"
+                ),
+                (
+                    f"- **中間目的:** "
+                    f"{semantic.desires.intermediate_desire}"
+                ),
+                (
+                    f"- **深層価値候補:** "
+                    f"{semantic.desires.deep_desire}"
+                ),
+                (
+                    f"- **タイトル―本文範囲不整合:** "
+                    f"{semantic.title_body_scope.mismatch:.4f}"
+                ),
+                (
+                    f"- **原因独占率:** "
+                    f"{semantic.cause_competition.cause_monopoly:.4f}"
+                ),
+                (
+                    f"- **制度―個人因果ブリッジ:** "
+                    f"{semantic.causal_layers.bridge_score:.4f}"
+                ),
+                (
+                    f"- **Transformation操作性:** "
+                    f"{semantic.transformation.operationality:.4f}"
+                ),
+                (
+                    f"- **自律性:** "
+                    f"{semantic.autonomy.autonomy_score:.4f}"
+                ),
+                (
+                    f"- **OS役割遷移:** "
+                    f"{semantic.metaphor_roles.transition_score:.4f}"
+                ),
+                (
+                    f"- **再帰的Transformation:** "
+                    f"{semantic.recursive_cycle.score:.4f}"
+                ),
+                (
+                    f"- **v0.7構成要素指数（品質点ではない）:** "
+                    f"{semantic.v07_component_index:.4f}"
+                ),
+                "",
+                "## 順序対照",
+                "",
+                controls,
+                "",
+                "## 文書階層",
+                "",
+                (
+                    f"- 本文ブロック: "
+                    f"{result.document_structure.get('layer_counts', {}).get('prose', 0)}"
+                ),
+                (
+                    f"- 数式ブロック: "
+                    f"{result.document_structure.get('layer_counts', {}).get('equation', 0)}"
+                ),
+                f"- 節ノード: {len(result.section_graph.nodes)}",
+                f"- 節遷移: {len(result.section_graph.edges)}",
+                f"- Licensed Jump: {len(result.licensed_jumps)}",
+                "",
+                "## 解釈境界",
+                "",
+                result.disclaimer,
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    pdf_path = destination / "report.pdf"
+    _write_summary_pdf(pdf_path, result)
+    return {
+        "fingerprint": str(fingerprint_path),
+        "sentence_map": str(sentence_path),
+        "turning_points": str(turning_path),
+        "motif_pairs": str(motif_path),
+        "motif_role_transitions": str(motif_role_path),
+        "concept_branches": str(branch_path),
+        "qa_closure": str(qa_path),
+        "claim_scope_audit": str(scope_path),
+        "relations": str(relation_path),
+        "target_asymmetry": str(asymmetry_path),
+        "relation_flips": str(flip_path),
+        "motif_functions": str(motif_function_path),
+        "closure_states": str(closure_path),
+        "discourse_units": str(discourse_path),
+        "section_graph": str(section_path),
+        "document_blocks": str(block_path),
+        **v06_paths,
+        **v07_paths,
+        "markdown": str(report_path),
+        "pdf": str(pdf_path),
+    }

@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install
+        run: python -m pip install -e .
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: CLI smoke test
+        run: |
+          atct-fingerprint analyze examples/sample_ja.txt \
+            --shuffles 8 \
+            --output reports/smoke
+          test -s reports/smoke/fingerprint.json
+          test -s reports/smoke/sentence_map.csv
+          test -s reports/smoke/motif_role_transitions.csv
+          test -s reports/smoke/concept_branches.csv
+          test -s reports/smoke/qa_closure.csv
+          test -s reports/smoke/claim_scope_audit.csv
+          test -s reports/smoke/relations.csv
+          test -s reports/smoke/target_asymmetry.csv
+          test -s reports/smoke/relation_flips.csv
+          test -s reports/smoke/motif_functions.csv
+          test -s reports/smoke/closure_states.csv
+          test -s reports/smoke/discourse_units.csv
+          test -s reports/smoke/causal_substitutions.csv
+          test -s reports/smoke/responsibility_shifts.csv
+          test -s reports/smoke/evidence_types.csv
+          test -s reports/smoke/sequence_audit.csv
+          test -s reports/smoke/metaphor_audit.csv
+          test -s reports/smoke/modality_history.csv
+          test -s reports/smoke/persuasion_events.csv
+          test -s reports/smoke/document_layers.csv
+          test -s reports/smoke/funnel.csv
+          test -s reports/smoke/desire_frames.csv
+          test -s reports/smoke/cause_candidates_v07.csv
+          test -s reports/smoke/cause_competition.csv
+          test -s reports/smoke/metaphor_roles_v07.csv
+          test -s reports/smoke/causal_layers.csv
+          test -s reports/smoke/transformation_v07.csv
+          test -s reports/smoke/autonomy_v07.csv
+          test -s reports/smoke/title_body_scope.csv
+          test -s reports/smoke/recursive_cycles.csv
+          test -s reports/smoke/v07_components.csv
+          test -s reports/smoke/section_graph.csv
+          test -s reports/smoke/document_blocks.csv
+          test -s reports/smoke/report.pdf
+          python -m json.tool reports/smoke/fingerprint.json > /dev/null
+          python - <<'PY'
+          import json
+          with open("reports/smoke/fingerprint.json", encoding="utf-8") as handle:
+              payload = json.load(handle)
+          assert payload["version"] == "0.7.0"
+          assert "semantic_structure_analysis" in payload
+          PY
